@@ -113,18 +113,50 @@ jobs:
       - name: Check Defender history after installation and startup
         shell: powershell
         run: |
-          $detections = @(Get-MpThreatDetection)
+          $detections = @(Get-MpThreatDetection | Select-Object ThreatID, Resources, ProcessName, InitialDetectionTime, ActionSuccess)
+          $threats = @(Get-MpThreat | Select-Object ThreatID, ThreatName, IsActive, Resources)
           ConvertTo-Json -InputObject $detections -Depth 6 |
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-detections.json') -Encoding utf8
+          ConvertTo-Json -InputObject $threats -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-threats.json') -Encoding utf8
+          $releaseRoots = @(
+            $env:GITHUB_WORKSPACE,
+            (Join-Path $env:RUNNER_TEMP 'defender-package'),
+            (Join-Path $env:RUNNER_TEMP 'material-picker-smoke'),
+            (Join-Path $env:LOCALAPPDATA 'Programs/素材抽出')
+          )
+          function Test-ReleaseDetection($detection) {
+            foreach ($resource in @($detection.Resources) + @($detection.ProcessName)) {
+              foreach ($root in $releaseRoots) {
+                if (([string]$resource).IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+              }
+            }
+            return $false
+          }
+          $releaseDetections = @($detections | Where-Object { Test-ReleaseDetection $_ })
+          ConvertTo-Json -InputObject $releaseDetections -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-release-detections.json') -Encoding utf8
+          if ($releaseDetections.Count) {
+            $releaseDetections | Format-List
+            throw 'Defender detected the release files or application during installation/startup'
+          }
           if ($detections.Count) {
-            $detections | Format-List ThreatID, Resources, InitialDetectionTime
-            throw 'Defender detected a threat during the build or application checks'
+            Write-Warning 'Additional runner detections are recorded in windows-defender-report. Review their resources and threat names.'
+            $detections | Format-List
           }
       - name: Verify release outputs
         run: |
           $files = Get-ChildItem -LiteralPath dist -Recurse -File
           if (@($files | Where-Object Extension -eq '.exe').Count -ne 2) { throw 'Expected portable EXE and installer' }
           if (@($files | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected one release ZIP' }
+          # Confirm the distributed files still match those inspected by Defender.
+          $scanHashes = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/package-hashes.json') -Raw | ConvertFrom-Json
+          foreach ($file in @($files | Where-Object { $_.Extension -in '.exe', '.zip' })) {
+            $verified = @($scanHashes | Where-Object { [IO.Path]::GetFileName($_.File) -eq $file.Name })
+            if ($verified.Count -ne 1 -or (Get-FileHash -LiteralPath $file.FullName).Hash -ne $verified[0].SHA256) {
+              throw "Release file differs from the scanned file: $($file.Name)"
+            }
+          }
           $files | Format-Table Name, Length
           "### Windows package" >> $env:GITHUB_STEP_SUMMARY
           "Download the release ZIP from the **windows-release** artifact below." >> $env:GITHUB_STEP_SUMMARY
