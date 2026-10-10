@@ -56,7 +56,13 @@ try {
         -ScanAvgCPULoadFactor 50
     # Automatic sample submission stays disabled; binaries are not uploaded for public analysis.
     Update-MpSignature -UpdateSource MMPC
-    $status = Get-MpComputerStatus
+    # Protection can take a few seconds to start after changing the runner defaults.
+    $readyDeadline = [DateTime]::UtcNow.AddSeconds(60)
+    do {
+        $status = Get-MpComputerStatus
+        if ($status.AMServiceEnabled -and $status.AntivirusEnabled -and $status.RealTimeProtectionEnabled) { break }
+        Start-Sleep -Seconds 3
+    } while ([DateTime]::UtcNow -lt $readyDeadline)
     $status | Format-List AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled, AMRunningMode, AMEngineVersion, AntivirusSignatureVersion, AntivirusSignatureLastUpdated
     $status | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $ReportDirectory 'status-scan.json') -Encoding UTF8
     $preferences = Get-MpPreference

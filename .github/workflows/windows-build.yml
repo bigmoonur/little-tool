@@ -5,6 +5,7 @@ on:
     paths:
       - '素材抽出工具/**'
       - '.github/workflows/windows-build.yml'
+      - '.github/scripts/scan-windows-package.ps1'
   workflow_dispatch:
     inputs:
       without_obfuscation:
@@ -60,6 +61,7 @@ jobs:
       - name: Test and build Windows release
         run: ./build.ps1 -WithoutObfuscation:($env:WITHOUT_OBFUSCATION -eq 'true')
       - name: Scan release ZIP and executables with updated Defender
+        shell: powershell
         run: |
           $packageDir = Join-Path $env:RUNNER_TEMP 'defender-package'
           New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
@@ -109,6 +111,7 @@ jobs:
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
       - name: Check Defender history after installation and startup
+        shell: powershell
         run: |
           $detections = @(Get-MpThreatDetection)
           ConvertTo-Json -InputObject $detections -Depth 6 |
