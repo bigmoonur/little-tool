@@ -1,0 +1,117 @@
+name: Windows release build
+
+on:
+  push:
+    paths:
+      - '素材抽出工具/**'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: 素材抽出工具
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: ''
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.27.2'
+          cache-dependency-path: 素材抽出工具/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: 素材抽出工具/frontend/package-lock.json
+      - name: Install pinned build tools
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+          if ($LASTEXITCODE -ne 0) { throw 'Wails installation failed' }
+          go install mvdan.cc/garble@v0.18.0
+          if ($LASTEXITCODE -ne 0) { throw 'Garble installation failed' }
+          # windows-2022 已预装 NSIS，显式确认工具可用。
+          $env:PATH += ";${env:ProgramFiles(x86)}\NSIS"
+          Get-Command makensis -ErrorAction Stop
+          "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
+      - name: Test and build obfuscated Windows release
+        run: ./build.ps1
+      - name: Verify installer silently installs the built application
+        run: |
+          $installer = (Resolve-Path 'build/bin/素材抽出-amd64-installer.exe').Path
+          $setup = Start-Process -FilePath $installer -ArgumentList '/S' -PassThru -Wait
+          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs/素材抽出/素材抽出.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { throw 'Installed application is missing' }
+          if ((Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath 'build/bin/素材抽出.exe').Hash) {
+            throw 'Installer did not include the expected application'
+          }
+      - name: Smoke test Windows application startup
+        run: |
+          $env:MATERIAL_PICKER_DATA = Join-Path $env:RUNNER_TEMP 'material-picker-smoke'
+          $process = Start-Process -FilePath (Resolve-Path 'build/bin/素材抽出.exe').Path -PassThru
+          try {
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            do {
+              Start-Sleep -Seconds 2
+              $process.Refresh()
+              if ($process.HasExited) { throw "Application exited during startup: $($process.ExitCode)" }
+            } while ($process.MainWindowHandle -eq 0 -and [DateTime]::UtcNow -lt $deadline)
+            if ($process.MainWindowHandle -eq 0) { throw 'Application did not create a window' }
+            Start-Sleep -Seconds 5
+            $process.Refresh()
+            if ($process.HasExited -or -not $process.Responding) { throw 'Application crashed or stopped responding' }
+            Write-Host "Started window: $($process.MainWindowTitle)"
+            # 保存启动画面以便检查 WebView 和中文激活界面，截图失败不影响功能测试。
+            try {
+              Add-Type -AssemblyName System.Windows.Forms
+              Add-Type -AssemblyName System.Drawing
+              $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $image = [Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+              $graphics = [Drawing.Graphics]::FromImage($image)
+              try {
+                $graphics.CopyFromScreen($bounds.Location, [Drawing.Point]::Empty, $bounds.Size)
+                $image.Save((Join-Path $env:RUNNER_TEMP 'material-picker-startup.png'))
+              } finally { $graphics.Dispose(); $image.Dispose() }
+            } catch { Write-Warning $_ }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - name: Verify release outputs
+        run: |
+          $files = Get-ChildItem -LiteralPath dist -Recurse -File
+          if (@($files | Where-Object Extension -eq '.exe').Count -ne 2) { throw 'Expected portable EXE and installer' }
+          if (@($files | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected one release ZIP' }
+          $files | Format-Table Name, Length
+          "### Windows package" >> $env:GITHUB_STEP_SUMMARY
+          "Download the release ZIP from the **windows-release** artifact below." >> $env:GITHUB_STEP_SUMMARY
+          "This build uses Garble and preserves the existing seven-day offline grace period." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-release
+          path: |
+            素材抽出工具/dist/*.zip
+            素材抽出工具/dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-startup-screenshot
+          path: ${{ runner.temp }}/material-picker-startup.png
+          if-no-files-found: ignore
+          retention-days: 14

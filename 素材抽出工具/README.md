@@ -33,10 +33,11 @@ brew install go makensis
 ```
 
 ```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+go install mvdan.cc/garble@v0.18.0
 ```
 
-Node.js 需要 20 以上。
+发布工具链固定为 Go 1.27.2、Wails 2.16.0、Garble 0.18.0；Node.js 使用 22 LTS。
 
 ## 开发
 
@@ -68,6 +69,9 @@ cd frontend && npx tsc --noEmit
 - 客户端只用授权码认证（`Authorization: License <key>`），程序里没有管理员或产品令牌。
 - 验证时限定本产品、本策略和本机指纹（Windows MachineGuid 的哈希），并带随机数防止重放。
 - 启动时验证，运行中每 6 小时复查；联网失败时凭上次验证结果离线使用 7 天。
+- 每次受保护操作都在本地复核签名、有效期和离线截止时间，不额外发起网络请求；宽限期不会超过授权本身的到期时间。
+- 收到明确拒绝或签名异常后清除旧的成功缓存，必须重新联网验证成功才能恢复；暂时断网、服务端 5xx 或限流仍可使用有效的离线缓存。
+- 独立的 `license-state.bin` 记录已经收到的拒绝结果及最高已使用时间，Windows 使用当前用户 DPAPI 保护。进程内以服务器签名时间和单调时钟计时，重启后的明显时间回退需要联网验证。已有 `license.json` 自动兼容，不要求重新输入授权码。
 - 抽取、复制、添加素材、导出等后端方法也会检查授权，绕过界面无效。
 - 策略要求心跳时才发送心跳；本机登记被服务器释放后（例如心跳超时），下次启动用保存的授权码自动重新登记。卖家要收回授权时应在后台暂停（Suspend）授权，而不是只删除机器。
 
@@ -81,7 +85,7 @@ Keygen 后台需要的设置：
 KEYGEN_LIVE=1 go test ./internal/license -run Live -v
 ```
 
-开发时跳过授权：`wails dev -tags devlicense`。发布构建不带这个标记，`devlicense.go` 不会被编译进去。
+开发时跳过授权：`wails dev -tags devlicense`。正式版使用编译期 `false` 常量，带 `production` 时即使误传 `devlicense` 也不能免授权。
 
 ## 打包
 
@@ -96,6 +100,12 @@ KEYGEN_LIVE=1 go test ./internal/license -run Live -v
 - 同名 zip，直接发给客户
 
 `./build.sh mac` 打包 macOS 版，用于在开发机上试用。
+
+Windows 上用 PowerShell 7 执行 `./build.ps1`。两个脚本都会先执行检查和测试，再使用 Wails 的 Garble 混淆（含字符串混淆和每次构建的随机种子），移除调试符号及本机路径。保留崩溃诊断，不使用 UPX 或反调试行为，以兼顾稳定性和兼容性。
+
+GitHub Actions 的 **Windows release build** 会在代码推送后自动执行，也支持手动运行。Windows runner 会运行授权回归测试（包括 DPAPI）、前端构建、混淆打包和程序启动检查，完成后在运行页的 **windows-release** artifact 中下载发布 ZIP 和 SHA-256 校验文件。ZIP 包含免安装 EXE、安装包和使用说明，保留 14 天；不会自动创建公开 Release 或发布给客户。启动截图另存为 **windows-startup-screenshot**，不放入发给客户的 ZIP。
+
+本地授权检查和 DPAPI 都不能抵御完全控制本机的攻击者；保留七天离线使用意味着服务器暂停授权无法在断网期间立即传播。需要更强的服务端控制时，应另行设计服务端必需功能，不能靠加壳保证绝对防破解。
 
 改版本号时同时修改 `wails.json` 的 `info.productVersion` 和 `app.go` 的 `AppVersion`。
 

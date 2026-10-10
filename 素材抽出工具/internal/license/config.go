@@ -14,13 +14,14 @@ const (
 	OfflineGrace = 7 * 24 * time.Hour
 	// RecheckInterval 是程序运行期间重新联网验证的间隔。
 	RecheckInterval = 6 * time.Hour
+	// 允许少量自动校时误差；明显的时钟回退需要重新联网验证。
+	clockTolerance = 5 * time.Minute
 
 	signHost = "api.keygen.sh"
 )
 
 // PublicKey 是 Keygen 账户的 Ed25519 公钥（64 位十六进制），在 Keygen 后台 Settings 页面复制。
-// 填写后，每个服务器响应和离线缓存都必须通过签名校验，可以防止伪造授权服务器或修改缓存；
-// 留空则不校验签名。
+// 每个服务器响应和离线缓存都必须通过签名校验；配置为空或无效时拒绝授权。
 var PublicKey = "9de093ff188ddcbaceb1cc6246d372ef7970cd6d9ab4385ad7e5c95e74e9a089"
 
 var apiBase = "https://api.keygen.sh"

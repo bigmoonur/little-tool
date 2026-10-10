@@ -20,9 +20,6 @@ var assets embed.FS
 
 const appID = "MaterialPicker"
 
-// licenseBypass 只在开发构建（wails dev -tags devlicense）中为 true，发布版本始终需要授权。
-var licenseBypass bool
-
 // dataDir 返回数据目录。程序旁有 data 文件夹时使用便携模式，数据跟随程序。
 func dataDir() (string, error) {
 	if dir := os.Getenv("MATERIAL_PICKER_DATA"); dir != "" {

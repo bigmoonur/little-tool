@@ -43,29 +43,39 @@ type stored struct {
 }
 
 type Manager struct {
-	mu        sync.Mutex
-	path      string
-	fp        string
-	host      string
-	c         *client
-	saved     stored
-	status    Status
-	ready     chan struct{}
-	readyOnce sync.Once
-	hbStop    chan struct{}
-	now       func() time.Time
+	opMu         sync.Mutex // 串行化激活、复查和解除，防止旧请求覆盖新状态。
+	mu           sync.Mutex
+	path         string
+	statePath    string
+	fp           string
+	host         string
+	c            *client
+	saved        stored
+	status       Status
+	ready        chan struct{}
+	readyOnce    sync.Once
+	hbStop       chan struct{}
+	now          func() time.Time
+	local        localState
+	stateInvalid bool
+	stateSavedAt time.Time
+	serverAt     time.Time
+	clockStarted time.Time
+	onChange     func(Status)
 }
 
 // New 读取保存的授权信息并计算本机指纹，不联网。
 func New(dataDir, version string) *Manager {
 	m := &Manager{
-		path:   filepath.Join(dataDir, "license.json"),
-		c:      newClient(version),
-		ready:  make(chan struct{}),
-		now:    time.Now,
-		status: Status{State: StateChecking},
+		path:      filepath.Join(dataDir, "license.json"),
+		statePath: filepath.Join(dataDir, "license-state.bin"),
+		c:         newClient(version),
+		ready:     make(chan struct{}),
+		now:       time.Now,
+		status:    Status{State: StateChecking},
 	}
 	m.load()
+	m.loadState()
 	raw, err := rawMachineID()
 	if err != nil || strings.TrimSpace(raw) == "" {
 		// 读不到系统标识时用随机标识代替，保存在授权文件里。
@@ -107,16 +117,22 @@ func (m *Manager) save() error {
 
 // Start 在后台完成首次验证，之后定期重新验证；状态变化时调用 onChange。
 func (m *Manager) Start(onChange func(Status)) {
+	m.mu.Lock()
+	m.onChange = onChange
+	m.mu.Unlock()
 	go func() {
 		m.Refresh()
 		m.readyOnce.Do(func() { close(m.ready) })
 		t := time.NewTicker(RecheckInterval)
 		defer t.Stop()
-		for range t.C {
-			prev := m.Status()
-			st := m.Refresh()
-			if onChange != nil && (prev.State != st.State || prev.Offline != st.Offline) {
-				onChange(st)
+		clock := time.NewTicker(time.Minute)
+		defer clock.Stop()
+		for {
+			select {
+			case <-t.C:
+				m.Refresh()
+			case <-clock.C:
+				m.Status() // 及时通知界面到期；每次核心操作也独立检查。
 			}
 		}
 	}()
@@ -130,8 +146,25 @@ func (m *Manager) Wait() Status {
 
 func (m *Manager) Status() Status {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.status
+	prev := m.status
+	if prev.State == StateActive {
+		if _, _, ok := m.offlineUntilLocked(m.saved); !ok {
+			m.status = m.inactive(prev.Key, "REVALIDATION_REQUIRED", "授权验证期限已到或系统时间发生变化，请联网重新验证")
+			m.status.Machine = m.host
+		} else {
+			now := m.effectiveNow().UnixMilli()
+			if now > m.local.SeenAt {
+				m.local.SeenAt = now
+				_ = m.saveState(false)
+			}
+		}
+	}
+	st, changed := m.status, m.onChange
+	m.mu.Unlock()
+	if changed != nil && prev.State != st.State {
+		changed(st)
+	}
+	return st
 }
 
 func (m *Manager) Active() bool { return m.Status().State == StateActive }
@@ -141,8 +174,13 @@ func (m *Manager) set(st Status) Status {
 		st.Machine = m.host
 	}
 	m.mu.Lock()
+	prev := m.status
 	m.status = st
+	changed := m.onChange
 	m.mu.Unlock()
+	if changed != nil && (prev.State != st.State || prev.Offline != st.Offline || prev.Code != st.Code) {
+		changed(st)
+	}
 	return st
 }
 
@@ -159,12 +197,15 @@ var needsMachine = map[string]bool{
 
 // Refresh 联网重新验证已保存的授权码。
 func (m *Manager) Refresh() Status {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	saved := m.stored()
 	if saved.Key == "" {
 		return m.set(Status{State: StateInactive})
 	}
 	v, s, err := m.c.validate(saved.Key, m.fp)
 	if err == nil && !v.Meta.Valid && needsMachine[v.Meta.Code] && saved.LicenseID != "" {
+		m.invalidate(saved.Key)
 		// 这台电脑以前激活过（例如心跳超时被自动释放），直接重新登记，不必让用户再输一次授权码。
 		st, aerr := m.activate(saved.Key)
 		if aerr == nil {
@@ -181,6 +222,7 @@ func (m *Manager) Refresh() Status {
 	case err != nil:
 		return m.set(m.failed(saved.Key, err))
 	case !v.Meta.Valid:
+		m.invalidate(saved.Key)
 		return m.set(m.inactive(saved.Key, v.Meta.Code, codeMessage(v.Meta.Code, v.Meta.Detail)))
 	}
 	return m.set(m.accept(saved.Key, v, s))
@@ -188,12 +230,17 @@ func (m *Manager) Refresh() Status {
 
 // Activate 用授权码激活本机。
 func (m *Manager) Activate(key string) (Status, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return m.Status(), errors.New("请输入授权码")
 	}
 	st, err := m.activate(key)
 	if err != nil {
+		if saved := m.stored(); saved.Key == key {
+			return m.set(m.failed(key, err)), err
+		}
 		return m.Status(), err
 	}
 	return st, nil
@@ -239,12 +286,15 @@ func (m *Manager) activate(key string) (Status, error) {
 
 // Deactivate 解除本机授权，释放一个激活名额。
 func (m *Manager) Deactivate() (Status, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	saved := m.stored()
 	if saved.Key != "" {
 		if err := m.c.deactivate(saved.Key, m.fp); err != nil {
 			return m.Status(), err
 		}
 	}
+	m.invalidate(saved.Key)
 	m.mu.Lock()
 	if m.hbStop != nil {
 		close(m.hbStop)
@@ -261,7 +311,14 @@ func (m *Manager) accept(key string, v validation, s signed) Status {
 	m.saved.Key = key
 	m.saved.LicenseID = v.Data.ID
 	m.saved.Last = &s
+	// 签名覆盖服务器时间；使用单调时钟累计经过时间，不随系统校时跳动。
+	m.serverAt, _ = http.ParseTime(s.Date)
+	m.clockStarted = m.now()
+	m.local.SeenAt = m.serverAt.UnixMilli()
+	delete(m.local.Blocked, v.Data.ID)
+	m.stateInvalid = false
 	_ = m.save()
+	_ = m.saveState(true)
 	m.mu.Unlock()
 	go m.heartbeat(key)
 	return Status{State: StateActive, Key: key, Masked: mask(key), Expiry: expiryOf(v)}
@@ -274,7 +331,8 @@ func (m *Manager) inactive(key, code, msg string) Status {
 // failed 处理联网失败：上次验证通过且在宽限期内时继续可用。
 func (m *Manager) failed(key string, err error) Status {
 	var ne *netError
-	if !errors.As(err, &ne) && !errors.Is(err, errSignature) {
+	if !errors.As(err, &ne) {
+		m.invalidate(key)
 		var ke *KeygenError
 		code := ""
 		if errors.As(err, &ke) {
@@ -299,29 +357,64 @@ func (m *Manager) failed(key string, err error) Status {
 
 // offlineUntil 检查离线缓存：签名有效、属于本机和本授权、未过宽限期、授权本身未到期。
 func (m *Manager) offlineUntil(saved stored) (time.Time, validation, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.offlineUntilLocked(saved)
+}
+
+func (m *Manager) offlineUntilLocked(saved stored) (time.Time, validation, bool) {
 	var v validation
-	if saved.Last == nil || verify(*saved.Last) != nil {
+	if m.stateInvalid || m.local.Blocked[saved.LicenseID] || saved.Last == nil || verifyWithKey(*saved.Last, m.c.publicKey) != nil {
+		return time.Time{}, v, false
+	}
+	if saved.Last.Method != "POST" || saved.Last.Target != accountPath("/licenses/actions/validate-key") {
 		return time.Time{}, v, false
 	}
 	if json.Unmarshal([]byte(saved.Last.Body), &v) != nil || !v.Meta.Valid || v.Data == nil {
 		return time.Time{}, v, false
 	}
-	if v.Data.ID != saved.LicenseID || v.Meta.Scope.Fingerprint != m.fp || v.Meta.Scope.Product != ProductID {
+	if v.Data.ID != saved.LicenseID || v.Meta.Scope.Fingerprint != m.fp || v.Meta.Scope.Product != ProductID || v.Meta.Scope.Policy != PolicyID {
 		return time.Time{}, v, false
 	}
 	at, err := http.ParseTime(saved.Last.Date)
 	if err != nil {
 		return time.Time{}, v, false
 	}
-	now := m.now()
+	now := m.effectiveNow()
 	until := at.Add(OfflineGrace)
-	if now.After(until) || now.Before(at.Add(-24*time.Hour)) {
+	floor := at
+	if seen := time.UnixMilli(m.local.SeenAt); seen.After(floor) {
+		floor = seen
+	}
+	if now.Before(floor.Add(-clockTolerance)) {
 		return time.Time{}, v, false
 	}
+	if now.Before(floor) {
+		now = floor
+	}
 	if exp := expiryOf(v); exp != "" {
-		if t, err := time.Parse(time.RFC3339, exp); err == nil && now.After(t) {
+		t, err := time.Parse(time.RFC3339, exp)
+		if err != nil {
 			return time.Time{}, v, false
 		}
+		if t.Before(until) {
+			until = t
+		}
+	}
+	if !now.Before(until) {
+		// 记住已经经过的签名截止时间，之后回拨时钟也不能复活此缓存。
+		if until.UnixMilli() > m.local.SeenAt {
+			m.local.SeenAt = until.UnixMilli()
+			_ = m.saveState(true)
+		}
+		return time.Time{}, v, false
+	}
+	if m.serverAt.IsZero() {
+		m.serverAt, m.clockStarted = now, m.now()
+	}
+	if now.UnixMilli() > m.local.SeenAt {
+		m.local.SeenAt = now.UnixMilli()
+		_ = m.saveState(false)
 	}
 	return until, v, true
 }
@@ -333,7 +426,7 @@ func (m *Manager) heartbeat(key string) {
 		return
 	}
 	m.mu.Lock()
-	if m.hbStop != nil {
+	if m.hbStop != nil || m.saved.Key != key || m.saved.Last == nil || m.local.Blocked[m.saved.LicenseID] {
 		m.mu.Unlock()
 		return
 	}

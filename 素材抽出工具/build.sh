@@ -2,7 +2,7 @@
 # 在 macOS 上打包发布文件。
 #   ./build.sh          打包 Windows 版（免安装 exe + 安装包），输出到 dist/
 #   ./build.sh mac      打包 macOS 版，用于在开发机上试用
-set -e
+set -eu
 cd "$(dirname "$0")"
 
 # makensis 需要 UTF-8 环境才能读取中文的产品名称。
@@ -11,11 +11,19 @@ export PATH="$PATH:$(go env GOPATH)/bin:/opt/homebrew/bin"
 
 VERSION=$(python3 -c "import json; print(json.load(open('wails.json'))['info']['productVersion'])")
 
+case "${GOFLAGS-}" in
+  *devlicense*|*debug*) echo "发布构建不能使用开发授权或调试标记" >&2; exit 1 ;;
+esac
+command -v garble >/dev/null || { echo "请先安装 garble v0.18.0（需要 Go 1.27）" >&2; exit 1; }
+(cd frontend && npm ci && npm run build)
 go vet ./...
-go test ./...
+go test -race ./...
+# Wails CLI 会为 macOS 正式构建添加该框架；直接运行正式版测试时也需要它。
+CGO_LDFLAGS="${CGO_LDFLAGS:-} -framework UniformTypeIdentifiers" go test -tags 'production,devlicense' ./...
 
-if [ "$1" = "mac" ]; then
-  wails build -platform darwin/arm64 -clean -trimpath
+if [ "${1:-windows}" = "mac" ]; then
+  wails build -platform darwin/arm64 -clean -trimpath -tags production \
+    -obfuscated -garbleargs '-literals -seed=random' -ldflags '-s -w'
   mkdir -p dist
   rm -rf "dist/素材抽出.app"
   cp -R "build/bin/素材抽出.app" dist/
@@ -23,7 +31,8 @@ if [ "$1" = "mac" ]; then
   exit 0
 fi
 
-wails build -platform windows/amd64 -nsis -clean -trimpath
+wails build -platform windows/amd64 -nsis -clean -trimpath -tags production \
+  -obfuscated -garbleargs '-literals -seed=random' -ldflags '-s -w'
 
 OUT="dist/素材抽出-$VERSION-windows"
 rm -rf "$OUT" "$OUT.zip"

@@ -23,6 +23,7 @@ const NO_LICENSE: LicenseStatus = {
 export default function App() {
   const [boot, setBoot] = useState<InitInfo | { error: string } | null>(null)
   const [license, setLicense] = useState<LicenseStatus | null>(null)
+  const opened = useRef(false)
 
   const load = () => api.init().then(setBoot, e => setBoot({ error: errorText(e) }))
 
@@ -44,7 +45,7 @@ export default function App() {
       </div>
     )
   }
-  if (!('error' in boot) && license.state !== 'active') {
+  if (!('error' in boot) && license.state !== 'active' && !opened.current) {
     return (
       <LicenseGate
         status={license}
@@ -66,7 +67,17 @@ export default function App() {
       </div>
     )
   }
-  return <Shell init={boot} license={license} setLicense={setLicense} />
+  if (license.state === 'active') opened.current = true
+  return (
+    <>
+      <Shell init={boot} license={license} setLicense={setLicense} />
+      {license.state !== 'active' && (
+        <div className="license-overlay" role="dialog" aria-modal="true" aria-label="重新验证授权">
+          <LicenseGate status={license} version={boot.version} onActivated={setLicense} />
+        </div>
+      )}
+    </>
+  )
 }
 
 const NAV: { view: View; label: string; icon: React.ReactNode }[] = [

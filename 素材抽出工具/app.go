@@ -17,7 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const AppVersion = "1.1.7"
+const AppVersion = "1.1.8"
 
 type App struct {
 	ctx     context.Context
@@ -80,8 +80,17 @@ func (a *App) DeactivateLicense() (license.Status, error) {
 
 // requireLicense 在后端再检查一次授权，界面被绕过时核心功能也不可用。
 func (a *App) requireLicense() error {
-	if licenseBypass || (a.lic != nil && a.lic.Active()) {
+	if licenseBypass {
 		return nil
+	}
+	if a.lic != nil {
+		st := a.lic.Status()
+		if st.State == license.StateActive {
+			return nil
+		}
+		if st.Message != "" {
+			return errors.New(st.Message)
+		}
 	}
 	return errors.New("程序尚未激活，请先输入授权码")
 }
@@ -189,7 +198,12 @@ func (a *App) Snapshot() library.Snapshot { return a.store.Snapshot() }
 
 func (a *App) ListText(id string) (string, error) { return a.store.ListText(id) }
 
-func (a *App) Undo() (library.Snapshot, error) { return a.store.Undo() }
+func (a *App) Undo() (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
+	return a.store.Undo()
+}
 
 // ---------- 分组 ----------
 
@@ -199,15 +213,24 @@ type Created struct {
 }
 
 func (a *App) CreateGroup(name string) (Created, error) {
+	if err := a.requireLicense(); err != nil {
+		return Created{}, err
+	}
 	snap, id, err := a.store.CreateGroup(name)
 	return Created{snap, id}, err
 }
 
 func (a *App) RenameGroup(id, name string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.RenameGroup(id, name)
 }
 
 func (a *App) SetGroupColor(id, color string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.SetGroupColor(id, color)
 }
 
@@ -216,33 +239,54 @@ func (a *App) SetGroupCollapsed(id string, collapsed bool) library.Snapshot {
 }
 
 func (a *App) MoveGroup(id string, index int) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.MoveGroup(id, index)
 }
 
 func (a *App) DeleteGroup(id string, deleteLists bool) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.DeleteGroup(id, deleteLists)
 }
 
 // ---------- 分类 ----------
 
 func (a *App) CreateList(name, groupID string) (Created, error) {
+	if err := a.requireLicense(); err != nil {
+		return Created{}, err
+	}
 	snap, id, err := a.store.CreateList(name, groupID)
 	return Created{snap, id}, err
 }
 
 func (a *App) RenameList(id, name string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.RenameList(id, name)
 }
 
 func (a *App) MoveList(id, groupID, beforeID string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.MoveList(id, groupID, beforeID)
 }
 
 func (a *App) DeleteList(id string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.DeleteList(id)
 }
 
 func (a *App) SetListText(id, text string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.SetListText(id, text)
 }
 
@@ -252,6 +296,9 @@ type Deduped struct {
 }
 
 func (a *App) DedupeList(id string) (Deduped, error) {
+	if err := a.requireLicense(); err != nil {
+		return Deduped{}, err
+	}
 	snap, n, err := a.store.DedupeList(id)
 	return Deduped{snap, n}, err
 }
@@ -325,15 +372,24 @@ func (a *App) SaveDraft(draft map[string]library.Pick) { a.store.SaveDraft(draft
 // ---------- 方案 ----------
 
 func (a *App) SavePreset(name string, picks map[string]library.Pick) (Created, error) {
+	if err := a.requireLicense(); err != nil {
+		return Created{}, err
+	}
 	snap, id, err := a.store.SavePreset(name, picks)
 	return Created{snap, id}, err
 }
 
 func (a *App) RenamePreset(id, name string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.RenamePreset(id, name)
 }
 
 func (a *App) DeletePreset(id string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
 	return a.store.DeletePreset(id)
 }
 
@@ -425,6 +481,9 @@ type Restored struct {
 }
 
 func (a *App) RestoreBackup() (Restored, error) {
+	if err := a.requireLicense(); err != nil {
+		return Restored{Snapshot: a.store.Snapshot()}, err
+	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "选择备份文件",
 		Filters: []runtime.FileFilter{{DisplayName: "素材抽出备份 (*.json)", Pattern: "*.json"}},
