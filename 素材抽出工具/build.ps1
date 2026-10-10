@@ -1,4 +1,6 @@
-# Windows 本地或 GitHub Actions：检查、混淆编译、生成安装包和发布 ZIP。
+# Windows 本地或 GitHub Actions：检查、编译、生成安装包和发布 ZIP。
+param([switch]$WithoutObfuscation)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Set-Location $PSScriptRoot
@@ -11,7 +13,7 @@ function Invoke-Checked {
 
 if ($env:GOFLAGS -match 'devlicense|debug') { throw 'Release builds cannot use development or debug flags' }
 $env:PATH += ";$(go env GOPATH)\bin;${env:ProgramFiles(x86)}\NSIS"
-Get-Command garble -ErrorAction Stop | Out-Null
+if (-not $WithoutObfuscation) { Get-Command garble -ErrorAction Stop | Out-Null }
 
 Push-Location frontend
 try {
@@ -23,11 +25,17 @@ Invoke-Checked -Program go -Arguments @('vet', './...')
 Invoke-Checked -Program go -Arguments @('test', '-race', './...')
 # 即使误传开发免授权标签，正式版的编译期常量也必须仍为 false。
 Invoke-Checked -Program go -Arguments @('test', '-tags', 'production,devlicense', './...')
-Invoke-Checked -Program wails -Arguments @('build', '-platform', 'windows/amd64', '-nsis', '-clean', '-trimpath',
-    '-tags', 'production', '-obfuscated', '-garbleargs', '-literals -seed=random', '-ldflags', '-s -w')
+$wailsArguments = @('build', '-platform', 'windows/amd64', '-nsis', '-clean', '-trimpath',
+    '-tags', 'production', '-ldflags', '-s -w')
+if (-not $WithoutObfuscation) {
+    $wailsArguments += @('-obfuscated', '-garbleargs', '-literals -seed=random')
+}
+Write-Host "Garble enabled: $(-not $WithoutObfuscation)"
+Invoke-Checked -Program wails -Arguments $wailsArguments
 
 $version = (Get-Content -LiteralPath wails.json -Raw -Encoding utf8 | ConvertFrom-Json).info.productVersion
 $name = "素材抽出-$version-windows"
+if ($WithoutObfuscation) { $name += '-no-garble' }
 $out = Join-Path dist $name
 if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out -Force | Out-Null
@@ -44,4 +52,14 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
     [IO.Compression.CompressionLevel]::Optimal, $true, [Text.Encoding]::UTF8)
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$zip.sha256", "$hash  $name.zip`n", [Text.Encoding]::UTF8)
+$sourceCommit = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Could not identify the source commit' }
+[ordered]@{
+    Version = $version
+    SourceCommit = $sourceCommit
+    GarbleEnabled = (-not [bool]$WithoutObfuscation)
+    WailsArguments = $wailsArguments
+    Package = "$name.zip"
+    SHA256 = $hash
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath 'dist/build-info.json' -Encoding utf8
 Write-Host "Built $zip"

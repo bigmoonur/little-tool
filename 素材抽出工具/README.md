@@ -103,7 +103,9 @@ KEYGEN_LIVE=1 go test ./internal/license -run Live -v
 
 Windows 上用 PowerShell 7 执行 `./build.ps1`。两个脚本都会先执行检查和测试，再使用 Wails 的 Garble 混淆（含字符串混淆和每次构建的随机种子），移除调试符号及本机路径。保留崩溃诊断，不使用 UPX 或反调试行为，以兼顾稳定性和兼容性。
 
-GitHub Actions 的 **Windows release build** 会在代码推送后自动执行，也支持手动运行。Windows runner 会运行授权回归测试（包括 DPAPI）、前端构建、混淆打包和程序启动检查，完成后在运行页的 **windows-release** artifact 中下载发布 ZIP 和 SHA-256 校验文件。ZIP 包含免安装 EXE、安装包和使用说明，保留 14 天；不会自动创建公开 Release 或发布给客户。启动截图另存为 **windows-startup-screenshot**，不放入发给客户的 ZIP。
+排查 Defender 误报时，Windows 上执行 `./build.ps1 -WithoutObfuscation` 可以生成关闭 Garble 的对照包，文件名带 `-no-garble`。该开关仅移除构建混淆，仍使用 `production` 标签、完整授权检查和相同测试；不会启用开发免授权模式。`dist/build-info.json` 保存源代码提交、构建参数和包的哈希。是否由混淆引起仍需同一设备对照或微软复核，不能仅凭构建成功判定误报。
+
+GitHub Actions 的 **Windows release build** 会在代码推送后自动执行，也支持手动运行；手动勾选 `without_obfuscation` 可生成上述对照包。Windows runner 会运行授权回归测试（包括 DPAPI）、前端构建、打包、Defender 扫描、安装和程序启动检查。扫描会清除 runner 默认排除项、更新病毒库并启用防护，安装和启动期间保持防护开启；不会自动上传二进制样本。完成后在运行页的 **windows-release** artifact 中下载发布 ZIP、SHA-256 校验文件和构建信息。ZIP 包含免安装 EXE、安装包和使用说明，保留 14 天；不会自动创建公开 Release 或发布给客户。启动截图另存为 **windows-startup-screenshot**，扫描报告另存为 **windows-defender-report**，不放入发给客户的 ZIP。runner 的扫描通过不保证客户设备得到相同结果。
 
 本地授权检查和 DPAPI 都不能抵御完全控制本机的攻击者；保留七天离线使用意味着服务器暂停授权无法在断网期间立即传播。需要更强的服务端控制时，应另行设计服务端必需功能，不能靠加壳保证绝对防破解。
 

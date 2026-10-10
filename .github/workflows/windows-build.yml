@@ -6,6 +6,12 @@ on:
       - '素材抽出工具/**'
       - '.github/workflows/windows-build.yml'
   workflow_dispatch:
+    inputs:
+      without_obfuscation:
+        description: 'Build a comparison package without Garble; all license protections remain enabled'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,6 +31,7 @@ jobs:
     env:
       GOTOOLCHAIN: local
       GOFLAGS: ''
+      WITHOUT_OBFUSCATION: ${{ inputs.without_obfuscation || false }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -42,14 +49,24 @@ jobs:
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
           if ($LASTEXITCODE -ne 0) { throw 'Wails installation failed' }
-          go install mvdan.cc/garble@v0.18.0
-          if ($LASTEXITCODE -ne 0) { throw 'Garble installation failed' }
+          if ($env:WITHOUT_OBFUSCATION -ne 'true') {
+            go install mvdan.cc/garble@v0.18.0
+            if ($LASTEXITCODE -ne 0) { throw 'Garble installation failed' }
+          }
           # windows-2022 已预装 NSIS，显式确认工具可用。
           $env:PATH += ";${env:ProgramFiles(x86)}\NSIS"
           Get-Command makensis -ErrorAction Stop
           "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
-      - name: Test and build obfuscated Windows release
-        run: ./build.ps1
+      - name: Test and build Windows release
+        run: ./build.ps1 -WithoutObfuscation:($env:WITHOUT_OBFUSCATION -eq 'true')
+      - name: Scan release ZIP and executables with updated Defender
+        run: |
+          $packageDir = Join-Path $env:RUNNER_TEMP 'defender-package'
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          Get-ChildItem -LiteralPath dist -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } |
+            Copy-Item -Destination $packageDir
+          & ../.github/scripts/scan-windows-package.ps1 -PackageDirectory $packageDir `
+            -ReportDirectory (Join-Path $env:RUNNER_TEMP 'defender-report')
       - name: Verify installer silently installs the built application
         run: |
           $installer = (Resolve-Path 'build/bin/素材抽出-amd64-installer.exe').Path
@@ -91,6 +108,15 @@ jobs:
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
+      - name: Check Defender history after installation and startup
+        run: |
+          $detections = @(Get-MpThreatDetection)
+          ConvertTo-Json -InputObject $detections -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-detections.json') -Encoding utf8
+          if ($detections.Count) {
+            $detections | Format-List ThreatID, Resources, InitialDetectionTime
+            throw 'Defender detected a threat during the build or application checks'
+          }
       - name: Verify release outputs
         run: |
           $files = Get-ChildItem -LiteralPath dist -Recurse -File
@@ -99,14 +125,22 @@ jobs:
           $files | Format-Table Name, Length
           "### Windows package" >> $env:GITHUB_STEP_SUMMARY
           "Download the release ZIP from the **windows-release** artifact below." >> $env:GITHUB_STEP_SUMMARY
-          "This build uses Garble and preserves the existing seven-day offline grace period." >> $env:GITHUB_STEP_SUMMARY
+          "Garble disabled for comparison: $env:WITHOUT_OBFUSCATION. All license checks and the existing seven-day offline grace period remain enabled." >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release
           path: |
             素材抽出工具/dist/*.zip
             素材抽出工具/dist/*.sha256
+            素材抽出工具/dist/build-info.json
           if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-defender-report
+          path: ${{ runner.temp }}/defender-report
+          if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
