@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $started = Get-Date
 $completed = $false
+$scanExitCode = $null
 $scanError = $null
 $failure = $null
 New-Item -ItemType Directory -Path $ReportDirectory -Force | Out-Null
@@ -69,14 +70,23 @@ try {
         throw 'Inherited exclusions or disabled archive scanning remain; scan cannot be accepted'
     }
     try {
-        Start-MpScan -ScanType CustomScan -ScanPath $PackageDirectory
-        $completed = $true
+        # MpCmdRun waits for completion and supplies an explicit scan result code.
+        $scanCommand = Join-Path $env:ProgramFiles 'Windows Defender\MpCmdRun.exe'
+        & $scanCommand -Scan -ScanType 3 -File $PackageDirectory
+        $scanExitCode = $LASTEXITCODE
+        if ($scanExitCode -eq 0) {
+            $completed = $true
+        } else {
+            $scanError = "MpCmdRun exited with code $scanExitCode"
+        }
     } catch {
         $scanError = $_.ToString()
     }
 } catch {
     $failure = $_.ToString()
 } finally {
+    # Give the detection/event providers time to publish remediation records.
+    Start-Sleep -Seconds 2
     $threats = @(Get-MpThreat -ErrorAction SilentlyContinue | Select-Object ThreatID, ThreatName, SeverityID, CategoryID, IsActive, DidThreatExecute, Resources)
     $detections = @(Get-MpThreatDetection -ErrorAction SilentlyContinue | Select-Object ThreatID, InitialDetectionTime, LastThreatStatusChangeTime, ActionSuccess, Resources, ProcessName)
     $packageDetections = @($detections | Where-Object {
@@ -91,6 +101,7 @@ try {
         Started = $started.ToUniversalTime().ToString('o')
         Finished = (Get-Date).ToUniversalTime().ToString('o')
         ScanCompleted = $completed
+        ScanExitCode = $scanExitCode
         ScanError = $scanError
         Failure = $failure
         Threats = $threats
