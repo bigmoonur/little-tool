@@ -58,7 +58,7 @@ export function useToasts() {
         </div>
       ))}
     </div>,
-    document.body,
+    document.getElementById('overlay-root') ?? document.body,
   )
 
   return { toast, node }

@@ -61,7 +61,7 @@ export default function App() {
   if ('error' in boot) {
     return (
       <div className="fatal">
-        <h1>素材抽出无法启动</h1>
+        <h1>文本随机提取工具无法启动</h1>
         <p>{boot.error}</p>
         <p className="dim">请确认当前 Windows 账户可以写入“应用数据”文件夹，然后重新打开程序。</p>
       </div>
@@ -70,7 +70,10 @@ export default function App() {
   if (license.state === 'active') opened.current = true
   return (
     <>
-      <Shell init={boot} license={license} setLicense={setLicense} />
+      <div className="licensed-content" inert={license.state !== 'active'}>
+        <Shell init={boot} license={license} setLicense={setLicense} />
+        <div id="overlay-root" />
+      </div>
       {license.state !== 'active' && (
         <div className="license-overlay" role="dialog" aria-modal="true" aria-label="重新验证授权">
           <LicenseGate status={license} version={boot.version} onActivated={setLicense} />
@@ -211,7 +214,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   // 全局快捷键
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('.modal-layer')) return
+      if (document.querySelector('.modal-layer, .license-overlay')) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault()
@@ -268,7 +271,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
         <header className="topbar">
           <div className="brand">
             <Logo />
-            <span>素材抽出</span>
+            <span>文本随机提取工具</span>
           </div>
           <nav className="nav" role="tablist" aria-label="页面">
             {NAV.map((n, i) => (

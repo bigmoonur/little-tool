@@ -179,6 +179,30 @@ func TestActivateValidateAndRestart(t *testing.T) {
 	}
 }
 
+func TestTwoToolsShareOneMachineSlot(t *testing.T) {
+	if raw, err := rawMachineID(); err != nil || strings.TrimSpace(raw) == "" {
+		t.Skip("requires a stable system machine identifier")
+	}
+	f, _ := newFake(t)
+	f.licenses["GOOD-KEY"].max = 1
+	text := New(t.TempDir(), "text-test")
+	video := New(t.TempDir(), "video-test")
+	if text.fp != video.fp {
+		t.Fatal("the two tools produced different fingerprints for this computer")
+	}
+	for _, m := range []*Manager{text, video} {
+		st, err := m.Activate("GOOD-KEY")
+		if err != nil || st.State != StateActive {
+			t.Fatalf("same-computer activation consumed another slot: %+v %v", st, err)
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if got := len(f.licenses["GOOD-KEY"].machines); got != 1 {
+		t.Fatalf("expected one shared device, got %d", got)
+	}
+}
+
 func TestActivateErrors(t *testing.T) {
 	newFake(t)
 	m := New(t.TempDir(), "test")

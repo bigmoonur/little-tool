@@ -10,7 +10,7 @@ import (
 )
 
 // TestLiveSignature 向真实的 Keygen 服务器验证一个不存在的授权码，确认配置的公钥能校验服务器签名。
-// 需要联网，默认跳过：KEYGEN_LIVE=1 go test ./internal/license -run Live -v
+// 需要联网，默认跳过：KEYGEN_LIVE=1 go test . -run Live -v
 func TestLiveSignature(t *testing.T) {
 	if os.Getenv("KEYGEN_LIVE") != "1" {
 		t.Skip("set KEYGEN_LIVE=1 to run against api.keygen.sh")
@@ -41,7 +41,7 @@ func TestLiveSignature(t *testing.T) {
 
 // TestLiveFlow 用真实授权码走一遍：激活 → 重启后验证 → 离线宽限 → 解除授权。
 // 使用临时指纹，结束时一定解除，不长期占用激活名额。
-// KEYGEN_LIVE_KEY=<授权码> go test ./internal/license -run LiveFlow -v
+// KEYGEN_LIVE_KEY=<授权码> go test . -run LiveFlow -v
 func TestLiveFlow(t *testing.T) {
 	key := os.Getenv("KEYGEN_LIVE_KEY")
 	if key == "" {

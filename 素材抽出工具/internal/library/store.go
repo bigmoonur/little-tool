@@ -854,7 +854,7 @@ func (s *Store) RestoreData(b []byte) (Snapshot, error) {
 	}
 	d := NewData()
 	if json.Unmarshal(b, &probe) != nil || len(probe.Lists) == 0 || json.Unmarshal(b, d) != nil {
-		return s.Snapshot(), userErr("这不是有效的素材抽出备份文件")
+		return s.Snapshot(), userErr("这不是有效的文本随机提取工具备份文件")
 	}
 	d.normalize()
 	return s.mutate("从备份恢复", func(cur *Data) error {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "素材抽出",
-  "outputfilename": "素材抽出",
+  "name": "文本随机提取工具",
+  "outputfilename": "文本随机提取工具",
   "frontend:install": "npm ci",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
@@ -11,8 +11,8 @@
     "email": ""
   },
   "info": {
-    "companyName": "素材抽出",
-    "productName": "素材抽出",
+    "companyName": "文本随机提取工具",
+    "productName": "文本随机提取工具",
     "productVersion": "1.1.8",
     "copyright": "Copyright © 2026",
     "comments": "按分类随机抽取素材，打乱后复制到剪贴板"

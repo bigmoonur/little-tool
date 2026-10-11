@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"materialpicker/internal/library"
-	"materialpicker/internal/license"
 
+	"github.com/bigmoonur/little-tool/shared/license"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -463,8 +463,8 @@ func (a *App) ExportBackup() (string, error) {
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "导出备份",
-		DefaultFilename: "素材抽出备份-" + time.Now().Format("20060102") + ".json",
-		Filters:         []runtime.FileFilter{{DisplayName: "素材抽出备份 (*.json)", Pattern: "*.json"}},
+		DefaultFilename: "文本随机提取工具备份-" + time.Now().Format("20060102") + ".json",
+		Filters:         []runtime.FileFilter{{DisplayName: "文本随机提取工具备份 (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return "", err
@@ -486,7 +486,7 @@ func (a *App) RestoreBackup() (Restored, error) {
 	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "选择备份文件",
-		Filters: []runtime.FileFilter{{DisplayName: "素材抽出备份 (*.json)", Pattern: "*.json"}},
+		Filters: []runtime.FileFilter{{DisplayName: "文本随机提取工具备份 (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return Restored{Snapshot: a.store.Snapshot()}, err

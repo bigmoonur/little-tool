@@ -87,6 +87,7 @@ func New(dataDir, version string) *Manager {
 		}
 		raw = m.saved.Fallback
 	}
+	// 保持旧版指纹前缀，两款工具在同机使用同一授权码时共用设备名额；更名不能改变它。
 	sum := sha256.Sum256([]byte("material-picker:" + strings.TrimSpace(raw)))
 	m.fp = hex.EncodeToString(sum[:])
 	m.host, _ = os.Hostname()

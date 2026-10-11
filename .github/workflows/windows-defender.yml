@@ -11,6 +11,14 @@ on:
         description: 'Windows release build run ID; empty selects the latest successful build on this branch'
         required: false
         type: string
+      package_artifact:
+        description: 'Package to scan from that build'
+        required: true
+        type: choice
+        default: windows-release
+        options:
+          - windows-release
+          - windows-release-video
 
 permissions:
   contents: read
@@ -32,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          PACKAGE_ARTIFACT: ${{ inputs.package_artifact || 'windows-release' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $runId = $env:BUILD_RUN_ID
@@ -50,7 +59,7 @@ jobs:
             throw 'Source run must be a successful Windows release build'
           }
           Write-Host "Scanning original artifact from $($info.url), commit $($info.headSha)"
-          gh run download $runId --name windows-release --dir (Join-Path $env:RUNNER_TEMP 'defender-package')
+          gh run download $runId --name $env:PACKAGE_ARTIFACT --dir (Join-Path $env:RUNNER_TEMP 'defender-package')
           if ($LASTEXITCODE -ne 0) { throw 'Could not download the original release artifact' }
       - name: Update and enable Defender, then scan the original package
         run: |

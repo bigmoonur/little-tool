@@ -1,0 +1,39 @@
+import { createContext, useContext } from 'react'
+import type { Done, LicenseStatus, PlanSummary, Progress, Settings, State, View } from './types'
+import type { ConfirmOptions, PromptOptions } from './ui/Modal'
+import type { ToastOptions } from './ui/Toasts'
+
+export interface CopyState {
+  phase: 'idle' | 'copying' | 'done'
+  plan?: PlanSummary
+  progress?: Progress
+  done?: Done
+}
+
+export interface Ctx {
+  state: State
+  setState: (s: State) => void
+  /** 重新扫描两个根目录。 */
+  refresh: () => Promise<void>
+  settings: Settings
+  setSettings: (s: Settings) => void
+  version: string
+  view: View
+  go: (v: View) => void
+  toast: (text: string, opts?: ToastOptions) => number
+  confirm: (o: ConfirmOptions) => Promise<string | null>
+  prompt: (o: PromptOptions) => Promise<string | null>
+  /** 执行后端调用，失败时显示错误提示并返回 undefined。 */
+  run: <T>(p: Promise<T>) => Promise<T | undefined>
+  historyVersion: number
+  copy: CopyState
+  /** 抽取一批并开始复制；需要清空旧视频时先确认。 */
+  startCopy: (counts: Record<string, number>, clean: boolean) => Promise<void>
+  cancelCopy: () => void
+  clearResult: () => void
+  license: LicenseStatus
+  setLicense: (s: LicenseStatus) => void
+}
+
+export const AppContext = createContext<Ctx>(null as unknown as Ctx)
+export const useApp = () => useContext(AppContext)

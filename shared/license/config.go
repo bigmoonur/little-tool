@@ -13,7 +13,7 @@ const (
 	// OfflineGrace 是联网验证失败时，凭上次成功验证结果继续使用的时间。
 	OfflineGrace = 7 * 24 * time.Hour
 	// RecheckInterval 是程序运行期间重新联网验证的间隔。
-	RecheckInterval = 6 * time.Hour
+	RecheckInterval = 24 * time.Hour
 	// 允许少量自动校时误差；明显的时钟回退需要重新联网验证。
 	clockTolerance = 5 * time.Minute
 

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"materialpicker/internal/library"
-	"materialpicker/internal/license"
 
+	"github.com/bigmoonur/little-tool/shared/license"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -81,7 +81,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "素材抽出",
+		Title:            "文本随机提取工具",
 		Width:            width,
 		Height:           height,
 		MinWidth:         860,
@@ -105,7 +105,7 @@ func main() {
 			IsZoomControlEnabled: false,
 		},
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "素材抽出", Message: "版本 " + AppVersion},
+			About: &mac.AboutInfo{Title: "文本随机提取工具", Message: "版本 " + AppVersion},
 		},
 	})
 	if err != nil {

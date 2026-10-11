@@ -1,6 +1,6 @@
-# 素材抽出 · 开发说明
+# 文本随机提取工具 · 开发说明
 
-面向 Windows 用户的桌面工具，在 macOS 上开发和打包。用户使用说明见 [使用说明.md](使用说明.md)。
+面向 Windows 用户的桌面工具，在 macOS 上开发和打包。源代码目录及数据目录保留旧名称，升级后会沿用原素材库和授权。用户使用说明见 [使用说明.md](使用说明.md)。
 
 - 后端：Go + [Wails v2](https://wails.io)，界面运行在系统 WebView2 中，打包后是单个 exe（约 12 MB）
 - 前端：React + TypeScript + Vite，没有使用 UI 组件库，样式都在 `frontend/src/styles.css`
@@ -10,7 +10,7 @@
 ```text
 main.go                    窗口配置、数据目录
 app.go                     暴露给界面的方法（剪贴板、文件对话框、关闭确认）
-internal/license/          Keygen 联网授权（激活、验证、离线宽限期、心跳、签名校验）
+../shared/license/        两款工具共用的 Keygen 联网授权（激活、验证、离线宽限期、心跳、签名校验）
 internal/library/          素材库核心逻辑，可单独测试
   model.go                 数据结构、文本拆行
   extract.go               抽取算法（与旧版 素材抽出.pyw 规则一致）
@@ -34,10 +34,9 @@ brew install go makensis
 
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-go install mvdan.cc/garble@v0.18.0
 ```
 
-发布工具链固定为 Go 1.27.2、Wails 2.16.0、Garble 0.18.0；Node.js 使用 22 LTS。
+发布工具链固定为 Go 1.27.2、Wails 2.16.0；Node.js 使用 22 LTS。Garble 0.18.0 为可选工具，默认不安装或启用。
 
 ## 开发
 
@@ -56,6 +55,7 @@ wails dev
 
 ```bash
 go test ./...
+go -C ../shared/license test -race ./...
 ```
 
 ```bash
@@ -64,11 +64,11 @@ cd frontend && npx tsc --noEmit
 
 ## 授权（Keygen）
 
-配置在 `internal/license/config.go`：Account、Product、Policy ID，以及 `PublicKey`。
+配置在 [`../shared/license/config.go`](../shared/license/config.go)：Account、Product、Policy ID，以及 `PublicKey`。
 
 - 客户端只用授权码认证（`Authorization: License <key>`），程序里没有管理员或产品令牌。
 - 验证时限定本产品、本策略和本机指纹（Windows MachineGuid 的哈希），并带随机数防止重放。
-- 启动时验证，运行中每 6 小时复查；联网失败时凭上次验证结果离线使用 7 天。
+- 启动时验证，运行中每 24 小时复查；联网失败时凭上次验证结果离线使用 7 天。
 - 每次受保护操作都在本地复核签名、有效期和离线截止时间，不额外发起网络请求；宽限期不会超过授权本身的到期时间。
 - 收到明确拒绝或签名异常后清除旧的成功缓存，必须重新联网验证成功才能恢复；暂时断网、服务端 5xx 或限流仍可使用有效的离线缓存。
 - 独立的 `license-state.bin` 记录已经收到的拒绝结果及最高已使用时间，Windows 使用当前用户 DPAPI 保护。进程内以服务器签名时间和单调时钟计时，重启后的明显时间回退需要联网验证。已有 `license.json` 自动兼容，不要求重新输入授权码。
@@ -82,7 +82,7 @@ Keygen 后台需要的设置：
 - `PublicKey` 已填入账户的 Ed25519 公钥（Keygen 后台 Settings 页），所有服务器响应和离线缓存都会校验签名。更换公钥后运行下面的命令，确认能校验真实服务器的签名：
 
 ```bash
-KEYGEN_LIVE=1 go test ./internal/license -run Live -v
+KEYGEN_LIVE=1 go -C ../shared/license test . -run Live -v
 ```
 
 开发时跳过授权：`wails dev -tags devlicense`。正式版使用编译期 `false` 常量，带 `production` 时即使误传 `devlicense` 也不能免授权。
@@ -95,17 +95,17 @@ KEYGEN_LIVE=1 go test ./internal/license -run Live -v
 
 输出到 `dist/`：
 
-- `素材抽出-版本号-windows/素材抽出-版本号-安装包.exe`：按当前用户安装，不需要管理员权限
-- `素材抽出-版本号-windows/素材抽出.exe`：免安装版
+- `文本随机提取工具-版本号-windows-no-garble/文本随机提取工具-版本号-安装包.exe`：按当前用户安装，不需要管理员权限
+- `文本随机提取工具-版本号-windows-no-garble/文本随机提取工具.exe`：免安装版
 - 同名 zip，直接发给客户
 
 `./build.sh mac` 打包 macOS 版，用于在开发机上试用。
 
-Windows 上用 PowerShell 7 执行 `./build.ps1`。两个脚本都会先执行检查和测试，再使用 Wails 的 Garble 混淆（含字符串混淆和每次构建的随机种子），移除调试符号及本机路径。保留崩溃诊断，不使用 UPX 或反调试行为，以兼顾稳定性和兼容性。
+Windows 上用 PowerShell 7 执行 `./build.ps1`。两个脚本默认不使用 Garble，仍固定 `production` 标签、移除调试符号及本机路径，并运行应用测试、共享授权回归测试和正式版免授权防护测试。`./build.ps1 -WithoutObfuscation` 仍兼容；只有显式使用 `-WithObfuscation` 或 `./build.sh --garble` 才启用 Garble。Windows 脚本的 `dist/build-info.json` 保存源代码提交、构建参数和包的哈希。不使用 UPX、反调试或虚拟机限制。
 
-排查 Defender 误报时，Windows 上执行 `./build.ps1 -WithoutObfuscation` 可以生成关闭 Garble 的对照包，文件名带 `-no-garble`。该开关仅移除构建混淆，仍使用 `production` 标签、完整授权检查和相同测试；不会启用开发免授权模式。`dist/build-info.json` 保存源代码提交、构建参数和包的哈希。是否由混淆引起仍需同一设备对照或微软复核，不能仅凭构建成功判定误报。
+GitHub Actions 的 **Windows release build** 使用同一流程检查两个工具，默认无 Garble；手动选择 `with_obfuscation` 才启用混淆。Windows runner 执行授权回归测试（包括 DPAPI）、前端构建、打包、Defender 扫描、安装和启动检查。扫描会清除 runner 默认排除项、更新病毒库并启用防护，安装和启动期间保持防护开启；不会自动上传二进制样本。文本包在 **windows-release** artifact，视频包在 **windows-release-video** artifact，保留 14 天。扫描报告和启动截图各自保存，不放入客户 ZIP。runner 扫描通过不保证客户设备得到相同结果。
 
-GitHub Actions 的 **Windows release build** 会在代码推送后自动执行，也支持手动运行；手动勾选 `without_obfuscation` 可生成上述对照包。Windows runner 会运行授权回归测试（包括 DPAPI）、前端构建、打包、Defender 扫描、安装和程序启动检查。扫描会清除 runner 默认排除项、更新病毒库并启用防护，安装和启动期间保持防护开启；不会自动上传二进制样本。完成后在运行页的 **windows-release** artifact 中下载发布 ZIP、SHA-256 校验文件和构建信息。ZIP 包含免安装 EXE、安装包和使用说明，保留 14 天；不会自动创建公开 Release 或发布给客户。启动截图另存为 **windows-startup-screenshot**，扫描报告另存为 **windows-defender-report**，不放入发给客户的 ZIP。runner 的扫描通过不保证客户设备得到相同结果。
+两个工具使用同一份 Account、Product、Policy ID 和公钥，以及稳定的机器指纹。同一授权码在同一电脑上共用一个设备名额，但各自保存授权缓存，首次使用时分别输入一次授权码。另一款工具保留授权码时可能自动重新登记设备，因此换电脑前需要在两款工具中都解除授权。详见[共享授权说明](../shared/license/README.md)。
 
 本地授权检查和 DPAPI 都不能抵御完全控制本机的攻击者；保留七天离线使用意味着服务器暂停授权无法在断网期间立即传播。需要更强的服务端控制时，应另行设计服务端必需功能，不能靠加壳保证绝对防破解。
 
