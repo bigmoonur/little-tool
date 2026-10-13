@@ -3,6 +3,7 @@
 import {license} from '../models';
 import {library} from '../models';
 import {main} from '../models';
+import {applock} from '../models';
 
 export function ActivateLicense(arg1:string):Promise<license.Status>;
 
@@ -32,6 +33,8 @@ export function DeletePreset(arg1:string):Promise<library.Snapshot>;
 
 export function DeleteTag(arg1:string):Promise<library.Snapshot>;
 
+export function DisableLock(arg1:string):Promise<applock.Status>;
+
 export function ExportBackup():Promise<string>;
 
 export function ExportList(arg1:string):Promise<string>;
@@ -49,6 +52,8 @@ export function Init():Promise<main.InitInfo>;
 export function LicenseStatus():Promise<license.Status>;
 
 export function ListText(arg1:string):Promise<string>;
+
+export function LockStatus():Promise<applock.Status>;
 
 export function MoveGroup(arg1:string,arg2:number):Promise<library.Snapshot>;
 
@@ -68,6 +73,8 @@ export function RenamePreset(arg1:string,arg2:string):Promise<library.Snapshot>;
 
 export function RenameTag(arg1:string,arg2:string):Promise<library.Snapshot>;
 
+export function ResetLockWithLicense(arg1:string):Promise<applock.Status>;
+
 export function RestoreBackup():Promise<main.Restored>;
 
 export function SaveDraft(arg1:Record<string, library.Pick>):Promise<void>;
@@ -84,6 +91,8 @@ export function SetListTags(arg1:string,arg2:Array<string>):Promise<library.Snap
 
 export function SetListText(arg1:string,arg2:string):Promise<library.Snapshot>;
 
+export function SetLock(arg1:string,arg2:string):Promise<applock.Status>;
+
 export function SetTagColor(arg1:string,arg2:string):Promise<library.Snapshot>;
 
 export function SetUnsaved(arg1:boolean):Promise<void>;
@@ -91,5 +100,7 @@ export function SetUnsaved(arg1:boolean):Promise<void>;
 export function Snapshot():Promise<library.Snapshot>;
 
 export function Undo():Promise<library.Snapshot>;
+
+export function Unlock(arg1:string):Promise<main.LockResult>;
 
 export function UpdateSettings(arg1:library.Settings):Promise<library.Snapshot>;

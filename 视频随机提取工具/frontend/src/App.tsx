@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { History, Pin, PinOff, Settings as SettingsIcon, Shuffle } from 'lucide-react'
+import { History, Pin, PinOff, Settings as SettingsIcon, Shuffle, Lock } from 'lucide-react'
 import { api, errorText, events } from './api'
 import { AppContext, type CopyState, type Ctx } from './ctx'
 import { SettingsDialog } from './dialogs/SettingsDialog'
 import { day, num } from './lib/format'
 import { draftToPicks, modeInfo, picksToDraft } from './lib/pick'
-import type { Draft, InitInfo, LicenseStatus, Pick, RepeatMode, Settings, State, View } from './types'
+import type { Draft, InitInfo, LicenseStatus, LockStatus, Pick, RepeatMode, Settings, State, View } from './types'
+import { LockScreen } from './views/LockScreen'
 import { ErrorBoundary } from './ui/ErrorBoundary'
 import { Logo } from './ui/Logo'
 import { useDialogs } from './ui/Modal'
@@ -74,6 +75,9 @@ function Shell({ init, initialState, license, setLicense }: {
   })
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(modeInfo(init.settings.mode).mode)
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [lock, setLock] = useState<LockStatus>(init.lock ?? { enabled: false, failures: 0, lockedUntil: 0 })
+  // 开了锁屏密码时，一打开就是锁着的；initial 直接盖住，manual（手动锁定）有落下来的动画。
+  const [locked, setLocked] = useState<'initial' | 'manual' | null>(init.lock?.enabled ? 'initial' : null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { toast, node: toastNode } = useToasts()
   const dialogs = useDialogs()
@@ -209,7 +213,7 @@ function Shell({ init, initialState, license, setLicense }: {
   // 快捷键 Ctrl+1 / Ctrl+2 切换页面
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('.modal-layer, .license-overlay')) return
+      if (document.querySelector('.modal-layer, .license-overlay, .lock-overlay')) return
       if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2')) {
         e.preventDefault()
         setView(NAV[Number(e.key) - 1].view)
@@ -250,12 +254,14 @@ function Shell({ init, initialState, license, setLicense }: {
     clearResult: () => setCopy({ phase: 'idle' }),
     license,
     setLicense,
+    lock,
+    setLock,
   }
 
   return (
     <AppContext.Provider value={ctx}>
       <div className="licensed-content" inert={license.state !== 'active'}>
-      <div className="app">
+      <div className="app" inert={!!locked}>
         <header className="topbar">
           <div className="brand">
             <Logo />
@@ -280,6 +286,11 @@ function Shell({ init, initialState, license, setLicense }: {
             {copy.phase === 'copying' && view !== 'extract' && (
               <button className="btn btn-ghost copying-chip" onClick={() => setView('extract')}>
                 正在复制 {copy.progress ? `${Math.floor((copy.progress.bytesDone / Math.max(1, copy.progress.bytesTotal)) * 100)}%` : ''}
+              </button>
+            )}
+            {lock.enabled && (
+              <button className="icon-btn" onClick={() => setLocked('manual')} aria-label="立即锁定" title="立即锁定：再次使用要输入密码">
+                <Lock size={17} />
               </button>
             )}
             <button
@@ -308,6 +319,17 @@ function Shell({ init, initialState, license, setLicense }: {
       {dialogs.node}
       {toastNode}
       <div id="overlay-root" />
+      {locked && (
+        <LockScreen
+          status={lock}
+          dropIn={locked === 'manual'}
+          onStatus={setLock}
+          onUnlocked={reset => {
+            setLocked(null)
+            if (reset) toast('锁屏密码已关闭，可以在设置里重新设置', { kind: 'ok' })
+          }}
+        />
+      )}
       </div>
       {license.state !== 'active' && (
         <div className="license-overlay" role="dialog" aria-modal="true" aria-label="重新验证授权">

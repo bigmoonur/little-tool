@@ -183,7 +183,7 @@ export function ExtractView() {
   extractRef.current = extract
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !document.querySelector('.modal-layer, .license-overlay')) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !document.querySelector('.modal-layer, .license-overlay, .lock-overlay')) {
         e.preventDefault()
         extractRef.current()
       }

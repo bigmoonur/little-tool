@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Done, Draft, LicenseStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, View } from './types'
+import type { Done, Draft, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, View } from './types'
 import type { ConfirmOptions, PromptOptions } from './ui/Modal'
 import type { ToastOptions } from './ui/Toasts'
 
@@ -38,6 +38,9 @@ export interface Ctx {
   clearResult: () => void
   license: LicenseStatus
   setLicense: (s: LicenseStatus) => void
+  /** 锁屏密码的状态；设置里开关或修改后更新。 */
+  lock: LockStatus
+  setLock: (s: LockStatus) => void
 }
 
 export const AppContext = createContext<Ctx>(null as unknown as Ctx)

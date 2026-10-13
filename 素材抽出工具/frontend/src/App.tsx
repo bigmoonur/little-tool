@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { History, Library, Pin, PinOff, Plus, Settings, Shuffle, Upload } from 'lucide-react'
+import { History, Library, Lock, Pin, PinOff, Plus, Settings, Shuffle, Upload } from 'lucide-react'
 import { api, errorText, runtime } from './api'
 import { AppContext, type Ctx, type ImportOpen } from './ctx'
 import { ImportDialog } from './dialogs/ImportDialog'
 import { SettingsDialog } from './dialogs/SettingsDialog'
 import { hasFiles, loadFiles, type LoadedFile } from './lib/files'
 import { draftToPicks, picksToDraft } from './lib/pick'
-import type { Draft, Extracted, InitInfo, LicenseStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
+import type { Draft, Extracted, InitInfo, LicenseStatus, LockStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
 import { useDialogs } from './ui/Modal'
 import { useToasts } from './ui/Toasts'
 import { ExtractView } from './views/ExtractView'
 import { HistoryView } from './views/HistoryView'
 import { LibraryView } from './views/LibraryView'
 import { LicenseGate } from './views/LicenseGate'
+import { LockScreen } from './views/LockScreen'
 import { Logo } from './ui/Logo'
 import { day } from './lib/format'
 
@@ -107,6 +108,9 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [fileDrag, setFileDrag] = useState(false)
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [lock, setLock] = useState<LockStatus>(init.lock ?? { enabled: false, failures: 0, lockedUntil: 0 })
+  // 开了锁屏密码时，一打开就是锁着的；initial 直接盖住，manual（手动锁定）有落下来的动画。
+  const [locked, setLocked] = useState<'initial' | 'manual' | null>(init.lock?.enabled ? 'initial' : null)
   const guard = useRef<(() => Promise<boolean>) | null>(null)
   const { toast, node: toastNode } = useToasts()
   const dialogs = useDialogs()
@@ -173,6 +177,8 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
     bumpHistory: () => setHistoryVersion(v => v + 1),
     license,
     setLicense,
+    lock,
+    setLock,
     leave: passGuard,
   }
   const ctxRef = useRef(ctx)
@@ -219,7 +225,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   // 全局快捷键
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('.modal-layer, .license-overlay')) return
+      if (document.querySelector('.modal-layer, .license-overlay, .lock-overlay')) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault()
@@ -272,7 +278,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
 
   return (
     <AppContext.Provider value={ctx}>
-      <div className="app">
+      <div className="app" inert={!!locked}>
         <header className="topbar">
           <div className="brand">
             <Logo />
@@ -298,6 +304,11 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
               <Plus size={16} />
               添加素材
             </button>
+            {lock.enabled && (
+              <button className="icon-btn" onClick={() => setLocked('manual')} aria-label="立即锁定" title="立即锁定：再次使用要输入密码">
+                <Lock size={17} />
+              </button>
+            )}
             <button
               className={`icon-btn pin ${snap.settings.alwaysOnTop ? 'is-on' : ''}`}
               onClick={togglePin}
@@ -335,6 +346,17 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {dialogs.node}
       {toastNode}
+      {locked && (
+        <LockScreen
+          status={lock}
+          dropIn={locked === 'manual'}
+          onStatus={setLock}
+          onUnlocked={reset => {
+            setLocked(null)
+            if (reset) toast('锁屏密码已关闭，可以在设置里重新设置', { kind: 'ok' })
+          }}
+        />
+      )}
     </AppContext.Provider>
   )
 }

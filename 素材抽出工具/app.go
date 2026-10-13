@@ -14,6 +14,7 @@ import (
 	"materialpicker/internal/library"
 
 	"github.com/bigmoonur/little-tool/shared/license"
+	"github.com/bigmoonur/little-tool/shared/license/applock"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -24,6 +25,8 @@ type App struct {
 	store   *library.Store
 	lic     *license.Manager
 	initErr error
+	lock    *applock.Lock
+	lockMu  sync.Mutex
 
 	closeMu    sync.Mutex
 	allowClose bool
@@ -32,7 +35,11 @@ type App struct {
 }
 
 func NewApp(store *library.Store, lic *license.Manager, initErr error) *App {
-	return &App{store: store, lic: lic, initErr: initErr}
+	a := &App{store: store, lic: lic, initErr: initErr}
+	if initErr == nil && store != nil {
+		a.lock = applock.Open(store.Dir())
+	}
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -177,11 +184,12 @@ type InitInfo struct {
 	Version  string           `json:"version"`
 	Platform string           `json:"platform"`
 	MaxLines int              `json:"maxLines"`
+	Lock     applock.Status   `json:"lock"`
 }
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
 	notice := a.store.Notice
 	a.store.Notice = ""
@@ -191,6 +199,7 @@ func (a *App) Init() (InitInfo, error) {
 		Version:  AppVersion,
 		Platform: goruntime.GOOS,
 		MaxLines: library.MaxOutputLines,
+		Lock:     a.LockStatus(),
 	}, nil
 }
 

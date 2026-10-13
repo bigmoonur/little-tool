@@ -1,7 +1,7 @@
 // 对 Wails 生成的绑定做一层类型整理。
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
-import type { Done, HistoryEntry, InitInfo, LicenseStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme } from './types'
+import type { Done, HistoryEntry, InitInfo, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme } from './types'
 
 const go = Go as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
 const call = <T,>(name: string, ...args: unknown[]) => go[name](...args) as Promise<T>
@@ -37,6 +37,12 @@ export const api = {
   deletePreset: (id: string) => call<State>('DeletePreset', id),
   openFolder: (path: string) => call<void>('OpenFolder', path),
   openDataFolder: () => call<void>('OpenDataFolder'),
+
+  lockStatus: () => call<LockStatus>('LockStatus'),
+  unlock: (pin: string) => call<{ ok: boolean; status: LockStatus }>('Unlock', pin),
+  setLock: (current: string, pin: string) => call<LockStatus>('SetLock', current, pin),
+  disableLock: (current: string) => call<LockStatus>('DisableLock', current),
+  resetLockWithLicense: (key: string) => call<LockStatus>('ResetLockWithLicense', key),
 
   licenseStatus: () => call<LicenseStatus>('LicenseStatus'),
   activateLicense: (key: string) => call<LicenseStatus>('ActivateLicense', key),

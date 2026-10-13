@@ -13,6 +13,7 @@ import (
 	"videopicker/internal/picker"
 
 	"github.com/bigmoonur/little-tool/shared/license"
+	"github.com/bigmoonur/little-tool/shared/license/applock"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -24,6 +25,8 @@ type App struct {
 	lic     licenseManager
 	initErr error
 	rng     *rand.Rand
+	lock    *applock.Lock
+	lockMu  sync.Mutex
 
 	mu        sync.Mutex
 	pending   *picker.Plan
@@ -34,7 +37,11 @@ type App struct {
 }
 
 func NewApp(store *picker.Store, lic licenseManager, initErr error) *App {
-	return &App{store: store, lic: lic, initErr: initErr, rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
+	a := &App{store: store, lic: lic, initErr: initErr, rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
+	if initErr == nil && store != nil {
+		a.lock = applock.Open(store.Dir())
+	}
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -104,13 +111,14 @@ type InitInfo struct {
 	Settings picker.Settings `json:"settings"`
 	Version  string          `json:"version"`
 	Platform string          `json:"platform"`
+	Lock     applock.Status  `json:"lock"`
 }
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeRepeat}}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeRepeat}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
-	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS}, nil
+	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS, Lock: a.LockStatus()}, nil
 }
 
 // State 是界面需要的文件夹信息，每次都重新扫描磁盘。

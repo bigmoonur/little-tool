@@ -2,7 +2,7 @@
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
 import type {
-  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, Pick, PickRequest, Settings, Snapshot,
+  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, LockStatus, Pick, PickRequest, Settings, Snapshot,
 } from './types'
 
 type Created = { snapshot: Snapshot; id: string }
@@ -62,6 +62,12 @@ export const api = {
   activateLicense: (key: string) => call<LicenseStatus>('ActivateLicense', key),
   refreshLicense: () => call<LicenseStatus>('RefreshLicense'),
   deactivateLicense: () => call<LicenseStatus>('DeactivateLicense'),
+
+  lockStatus: () => call<LockStatus>('LockStatus'),
+  unlock: (pin: string) => call<{ ok: boolean; status: LockStatus }>('Unlock', pin),
+  setLock: (current: string, pin: string) => call<LockStatus>('SetLock', current, pin),
+  disableLock: (current: string) => call<LockStatus>('DisableLock', current),
+  resetLockWithLicense: (key: string) => call<LockStatus>('ResetLockWithLicense', key),
 
   setUnsaved: (v: boolean) => call<void>('SetUnsaved', v),
   holdClose: () => call<void>('HoldClose'),

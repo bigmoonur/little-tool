@@ -46,6 +46,10 @@ export function DeleteTag(arg1) {
   return window['go']['main']['App']['DeleteTag'](arg1);
 }
 
+export function DisableLock(arg1) {
+  return window['go']['main']['App']['DisableLock'](arg1);
+}
+
 export function History() {
   return window['go']['main']['App']['History']();
 }
@@ -56,6 +60,10 @@ export function Init() {
 
 export function LicenseStatus() {
   return window['go']['main']['App']['LicenseStatus']();
+}
+
+export function LockStatus() {
+  return window['go']['main']['App']['LockStatus']();
 }
 
 export function OpenDataFolder() {
@@ -82,6 +90,10 @@ export function RenameTag(arg1, arg2) {
   return window['go']['main']['App']['RenameTag'](arg1, arg2);
 }
 
+export function ResetLockWithLicense(arg1) {
+  return window['go']['main']['App']['ResetLockWithLicense'](arg1);
+}
+
 export function SaveDraft(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveDraft'](arg1, arg2, arg3);
 }
@@ -98,6 +110,10 @@ export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
 }
 
+export function SetLock(arg1, arg2) {
+  return window['go']['main']['App']['SetLock'](arg1, arg2);
+}
+
 export function SetTagColor(arg1, arg2) {
   return window['go']['main']['App']['SetTagColor'](arg1, arg2);
 }
@@ -108,6 +124,10 @@ export function Start(arg1) {
 
 export function State() {
   return window['go']['main']['App']['State']();
+}
+
+export function Unlock(arg1) {
+  return window['go']['main']['App']['Unlock'](arg1);
 }
 
 export function UpdateSettings(arg1) {

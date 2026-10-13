@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Draft, Extracted, LicenseStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
+import type { Draft, Extracted, LicenseStatus, LockStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
 import type { ConfirmOptions, PromptOptions } from './ui/Modal'
 import type { ToastOptions } from './ui/Toasts'
 import type { LoadedFile } from './lib/files'
@@ -51,6 +51,9 @@ export interface Ctx {
   bumpHistory: () => void
   license: LicenseStatus
   setLicense: (s: LicenseStatus) => void
+  /** 锁屏密码的状态；设置里开关或修改后更新。 */
+  lock: LockStatus
+  setLock: (s: LockStatus) => void
   /** 离开前检查编辑器里未保存的修改，用户取消时返回 false。 */
   leave: () => Promise<boolean>
 }

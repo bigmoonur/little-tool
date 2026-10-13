@@ -56,12 +56,22 @@ export interface Snapshot {
   undo: string
 }
 
+/** 锁屏：开启后打开软件要先输入 4 位密码。 */
+export interface LockStatus {
+  enabled: boolean
+  /** 连续输错的次数。 */
+  failures: number
+  /** 输错太多时，到这个时间（毫秒）之前不能再试；不用等时是 0。 */
+  lockedUntil: number
+}
+
 export interface InitInfo {
   snapshot: Snapshot
   notice: string
   version: string
   platform: string
   maxLines: number
+  lock: LockStatus
 }
 
 export interface PickRequest {

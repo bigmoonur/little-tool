@@ -3,8 +3,9 @@ import { api } from '../api'
 import { useApp } from '../ctx'
 import type { Settings, Theme } from '../types'
 import { Modal } from '../ui/Modal'
+import { LockDialog } from './LockDialog'
 import { day } from '../lib/format'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 function Segmented<T extends string>({ value, options, onChange, label }: {
   value: T
@@ -24,7 +25,19 @@ function Segmented<T extends string>({ value, options, onChange, label }: {
 }
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { settings, setSettings, run, version, license, setLicense, confirm, copy } = useApp()
+  const { settings, setSettings, run, version, license, setLicense, confirm, copy, lock, setLock, toast } = useApp()
+  const [lockDialog, setLockDialog] = useState<'set' | 'change' | 'disable' | null>(null)
+  // 密码小窗关闭后把焦点还给打开它的开关或按钮：点复选框不一定会让它得到焦点，
+  // 焦点留在窗口外的话，按 Esc 就关不掉设置了。
+  const lockTrigger = useRef<HTMLElement | null>(null)
+  const openLockDialog = (mode: 'set' | 'change' | 'disable', from: HTMLElement) => {
+    lockTrigger.current = from
+    setLockDialog(mode)
+  }
+  const closeLockDialog = () => {
+    setLockDialog(null)
+    requestAnimationFrame(() => lockTrigger.current?.focus())
+  }
   const [checking, setChecking] = useState(false)
 
   const refreshLicense = async () => {
@@ -89,6 +102,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3>锁屏</h3>
+          <label className="check-row">
+            <input type="checkbox" checked={lock.enabled} onChange={e => openLockDialog(e.target.checked ? 'set' : 'disable', e.target)} />
+            打开软件时需要输入 4 位密码
+          </label>
+          {lock.enabled && (
+            <div className="setting-row">
+              <span className="dim">开启后顶栏会多一个锁，可以随时锁定</span>
+              <button className="btn" onClick={e => openLockDialog('change', e.currentTarget)}>
+                修改密码
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section>
           <h3>抽取与复制</h3>
           <label className="check-row">
             <input type="checkbox" checked={settings.openAfter} onChange={e => update({ openAfter: e.target.checked })} />
@@ -131,6 +160,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <p className="settings-version dim">视频分发工具 {version}</p>
       </div>
+      {lockDialog && (
+        <LockDialog
+          mode={lockDialog}
+          onClose={closeLockDialog}
+          onDone={st => {
+            const done = lockDialog
+            setLock(st)
+            closeLockDialog()
+            toast(done === 'disable' ? '已关闭锁屏密码' : done === 'change' ? '已修改锁屏密码' : '已开启锁屏密码，下次打开软件时生效', { kind: 'ok' })
+          }}
+        />
+      )}
     </Modal>
   )
 }
