@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CircleAlert, RefreshCw, WifiOff } from 'lucide-react'
 import { api, errorText } from '../api'
 import type { LicenseStatus } from '../types'
@@ -14,6 +14,11 @@ export function LicenseGate({ status, version, onActivated }: {
   const [busy, setBusy] = useState<'' | 'activate' | 'retry'>('')
   const [error, setError] = useState(status.message)
   const [network, setNetwork] = useState(status.network)
+
+  useEffect(() => {
+    setError(status.message)
+    setNetwork(status.network)
+  }, [status.message, status.network])
 
   const activate = async () => {
     if (!key.trim() || busy) return
@@ -31,20 +36,26 @@ export function LicenseGate({ status, version, onActivated }: {
   }
 
   const retry = async () => {
+    if (busy) return
     setBusy('retry')
     setError('')
-    const st = await api.refreshLicense()
-    setBusy('')
-    if (st.state === 'active') return onActivated(st)
-    setError(st.message)
-    setNetwork(st.network)
+    try {
+      const st = await api.refreshLicense()
+      if (st.state === 'active') return onActivated(st)
+      setError(st.message)
+      setNetwork(st.network)
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy('')
+    }
   }
 
   return (
     <div className="gate">
       <div className="gate-card">
         <Logo className="gate-logo" />
-        <h1>激活素材抽出</h1>
+        <h1>激活链接抽取工具</h1>
         <label className="field">
           <span className="field-label">授权码</span>
           <input
@@ -67,7 +78,7 @@ export function LicenseGate({ status, version, onActivated }: {
         <button className="btn btn-primary btn-lg gate-btn" onClick={activate} disabled={!key.trim() || !!busy}>
           {busy === 'activate' ? '正在激活…' : '激活'}
         </button>
-        {network && status.key && (
+        {status.key && (
           <button className="btn btn-ghost gate-retry" onClick={retry} disabled={!!busy}>
             <RefreshCw size={15} />
             {busy === 'retry' ? '正在验证…' : '重新联网验证'}

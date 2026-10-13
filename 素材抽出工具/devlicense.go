@@ -1,6 +1,6 @@
-//go:build devlicense
+//go:build devlicense && !production
 
 package main
 
-// 开发时跳过授权检查。发布构建不带 devlicense 标记，这个文件不会被编译进去。
-func init() { licenseBypass = true }
+// 只用于本地开发，production 构建即使误传 devlicense 也不能免授权。
+const licenseBypass = true

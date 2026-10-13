@@ -1,0 +1,75 @@
+name: Windows Defender package scan
+
+on:
+  push:
+    paths:
+      - '.github/workflows/windows-defender.yml'
+      - '.github/scripts/scan-windows-package.ps1'
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Windows release build run ID; empty selects the latest successful build on this branch'
+        required: false
+        type: string
+      package_artifact:
+        description: 'Package to scan from that build'
+        required: true
+        type: choice
+        default: windows-release
+        options:
+          - windows-release
+          - windows-release-video
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scan:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download the original release package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          PACKAGE_ARTIFACT: ${{ inputs.package_artifact || 'windows-release' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runId = $env:BUILD_RUN_ID
+          if (-not $runId) {
+            $runId = gh run list --workflow windows-build.yml --branch $env:GITHUB_REF_NAME --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not find the source build' }
+          }
+          if ($runId -notmatch '^\d+$') { throw 'A successful build run ID is required' }
+          $reportDir = Join-Path $env:RUNNER_TEMP 'defender-report'
+          New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
+          $source = gh run view $runId --json databaseId,headSha,headBranch,conclusion,workflowName,url
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the source build' }
+          $source | Set-Content -LiteralPath (Join-Path $reportDir 'source-build.json') -Encoding UTF8
+          $info = $source | ConvertFrom-Json
+          if ($info.workflowName -ne 'Windows release build' -or $info.conclusion -ne 'success') {
+            throw 'Source run must be a successful Windows release build'
+          }
+          Write-Host "Scanning original artifact from $($info.url), commit $($info.headSha)"
+          gh run download $runId --name $env:PACKAGE_ARTIFACT --dir (Join-Path $env:RUNNER_TEMP 'defender-package')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the original release artifact' }
+      - name: Update and enable Defender, then scan the original package
+        run: |
+          & .github/scripts/scan-windows-package.ps1 `
+            -PackageDirectory (Join-Path $env:RUNNER_TEMP 'defender-package') `
+            -ReportDirectory (Join-Path $env:RUNNER_TEMP 'defender-report')
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-defender-report
+          path: ${{ runner.temp }}/defender-report
+          if-no-files-found: error
+          retention-days: 14

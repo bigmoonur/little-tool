@@ -1,8 +1,8 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "素材抽出",
-  "outputfilename": "素材抽出",
-  "frontend:install": "npm install",
+  "name": "链接抽取工具",
+  "outputfilename": "链接抽取工具",
+  "frontend:install": "npm ci",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
@@ -11,9 +11,9 @@
     "email": ""
   },
   "info": {
-    "companyName": "素材抽出",
-    "productName": "素材抽出",
-    "productVersion": "1.1.7",
+    "companyName": "链接抽取工具",
+    "productName": "链接抽取工具",
+    "productVersion": "1.2.0",
     "copyright": "Copyright © 2026",
     "comments": "按分类随机抽取素材，打乱后复制到剪贴板"
   }

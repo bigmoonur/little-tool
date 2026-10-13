@@ -3,11 +3,11 @@ import { ClipboardCopy, FileDown, History, ListRestart, Trash2 } from 'lucide-re
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { num, partLabel, stamp, when } from '../lib/format'
-import { picksToDraft } from '../lib/pick'
+import { picksRule, picksToDraft, ruleNote } from '../lib/pick'
 import type { HistoryEntry, Pick } from '../types'
 
 export function HistoryView() {
-  const { historyVersion, run, toast, confirm, setDraft, go, snap, bumpHistory } = useApp()
+  const { historyVersion, run, toast, confirm, setDraft, setRepeatMode, setTagFilter, go, snap, bumpHistory } = useApp()
   const [items, setItems] = useState<HistoryEntry[] | null>(null)
   const [selId, setSelId] = useState('')
   const [text, setText] = useState<{ id: string; text: string | null; error?: string } | null>(null)
@@ -30,8 +30,10 @@ export function HistoryView() {
 
   const copy = async () => {
     if (!text?.text) return
-    const ok = await run(api.copyText(text.text))
-    if (ok !== undefined) toast(`已复制 ${num(sel!.total)} 条`, { kind: 'ok' })
+    if (!(await run(api.copyText(text.text)))) return
+    setDraft({})
+    await api.saveDraft({}).catch(() => {})
+    toast(`已复制 ${num(sel!.total)} 条`, { kind: 'ok' })
   }
 
   const save = async () => {
@@ -44,7 +46,11 @@ export function HistoryView() {
     if (!sel) return
     const picks: Record<string, Pick> = {}
     for (const p of sel.parts) if (snap.lists.some(l => l.id === p.listId)) picks[p.listId] = { count: p.count, repeat: p.repeat }
+    // 乘数规则和标签筛选一起带回去；标签已被删除时，抽取页会要求重新选择，不会改成抽取全部文本。
+    const rule = picksRule(sel.parts)
     setDraft(picksToDraft(picks))
+    setRepeatMode(rule.mode)
+    setTagFilter(rule.tagIds)
     go('extract')
   }
 
@@ -74,6 +80,8 @@ export function HistoryView() {
 
   const lines = text?.text ? text.text.split('\n', 500) : []
   const missing = sel ? sel.parts.filter(p => !snap.lists.some(l => l.id === p.listId)).length : 0
+  /** “上衣 25×4、裤子 10 · 循环重复 · 标签：新品” */
+  const summary = (h: HistoryEntry) => [h.parts.map(partLabel).join('、'), ruleNote(h.parts, snap.tags)].filter(Boolean).join(' · ')
 
   return (
     <div className="history">
@@ -91,7 +99,7 @@ export function HistoryView() {
               <button className={`hist-item ${h.id === selId ? 'is-selected' : ''}`} onClick={() => setSelId(h.id)}>
                 <span className="hist-when">{when(h.time)}</span>
                 <span className="hist-total tnum">{num(h.total)} 条</span>
-                <span className="hist-parts">{h.parts.map(partLabel).join('、')}</span>
+                <span className="hist-parts">{summary(h)}</span>
               </button>
             </li>
           ))}
@@ -105,7 +113,7 @@ export function HistoryView() {
                 {when(sel.time)} · {num(sel.total)} 条
               </h1>
             </div>
-            <div className="detail-meta">{sel.parts.map(partLabel).join('、')}</div>
+            <div className="detail-meta">{summary(sel)}</div>
             <div className="detail-actions">
               <button className="btn btn-primary" onClick={copy} disabled={!text?.text}>
                 <ClipboardCopy size={16} />
@@ -115,7 +123,7 @@ export function HistoryView() {
                 <FileDown size={16} />
                 保存为 TXT
               </button>
-              <button className="btn" onClick={reuse} title="把这次的数量填到抽取页，重新抽一批">
+              <button className="btn" onClick={reuse} title="把这次的数量、乘数规则和标签筛选填到抽取页，重新抽一批">
                 <ListRestart size={16} />
                 按这组数量再抽一次
               </button>

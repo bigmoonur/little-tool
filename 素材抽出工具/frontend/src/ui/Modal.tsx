@@ -74,7 +74,7 @@ export function Modal({ title, onClose, children, footer, width = 460, initialFo
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
     </div>,
-    document.body,
+    document.getElementById('overlay-root') ?? document.body,
   )
 }
 

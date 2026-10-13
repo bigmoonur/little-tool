@@ -25,21 +25,29 @@ type Group struct {
 	Collapsed bool   `json:"collapsed"`
 }
 
+type Tag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // List 是一个素材分类，对应原来的一个 TXT 文件，每个条目是一行。
 type List struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	GroupID   string   `json:"groupId"`
-	Items     []string `json:"items"`
-	UpdatedAt int64    `json:"updatedAt"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	GroupID   string     `json:"groupId"`
+	Items     []string   `json:"items"`
+	ItemTags  [][]string `json:"itemTags,omitempty"`
+	UpdatedAt int64      `json:"updatedAt"`
 
 	unique int
 }
 
-// Pick 是一个分类的抽取数量：抽 Count 条，每条连续重复 Repeat 次。
+// Pick 保存数量、乘数规则和文本标签筛选条件。
 type Pick struct {
-	Count  int `json:"count"`
-	Repeat int `json:"repeat"`
+	Count  int      `json:"count"`
+	Repeat int      `json:"repeat"`
+	Mode   string   `json:"mode,omitempty"`
+	TagIDs []string `json:"tagIds,omitempty"`
 }
 
 type Preset struct {
@@ -66,6 +74,7 @@ type WindowState struct {
 type Data struct {
 	Version  int             `json:"version"`
 	Groups   []Group         `json:"groups"`
+	Tags     []Tag           `json:"tags"`
 	Lists    []List          `json:"lists"`
 	Presets  []Preset        `json:"presets"`
 	Draft    map[string]Pick `json:"draft"`
@@ -85,6 +94,7 @@ func NewData() *Data {
 	return &Data{
 		Version:  1,
 		Groups:   []Group{},
+		Tags:     []Tag{},
 		Lists:    []List{},
 		Presets:  []Preset{},
 		Draft:    map[string]Pick{},
@@ -102,6 +112,16 @@ func (d *Data) normalize() {
 	}
 	if d.Lists == nil {
 		d.Lists = []List{}
+	}
+	if d.Tags == nil {
+		d.Tags = []Tag{}
+	}
+	tagIDs := map[string]bool{}
+	for i := range d.Tags {
+		if d.Tags[i].ID == "" {
+			d.Tags[i].ID = NewID()
+		}
+		tagIDs[d.Tags[i].ID] = true
 	}
 	if d.Presets == nil {
 		d.Presets = []Preset{}
@@ -129,6 +149,9 @@ func (d *Data) normalize() {
 			l.GroupID = ""
 		}
 		l.setItems(cleanItems(l.Items))
+		for j, ids := range l.ItemTags {
+			l.ItemTags[j] = cleanTagIDs(ids, tagIDs)
+		}
 	}
 	for i := range d.Presets {
 		if d.Presets[i].Picks == nil {
@@ -152,7 +175,28 @@ func (s *Settings) normalize() {
 }
 
 func (l *List) setItems(items []string) {
+	// 按原文及出现次序保留标签，支持排序、追加和删除；相同行仍可有各自的标签。
+	old := map[string][][]string{}
+	for i, text := range l.Items {
+		var tags []string
+		if i < len(l.ItemTags) {
+			tags = l.ItemTags[i]
+		}
+		key := strings.TrimSpace(text)
+		old[key] = append(old[key], tags)
+	}
+	tags := make([][]string, len(items))
+	for i, text := range items {
+		if matches := old[text]; len(matches) > 0 {
+			tags[i] = matches[0]
+			old[text] = matches[1:]
+		}
+		if tags[i] == nil {
+			tags[i] = []string{}
+		}
+	}
 	l.Items = items
+	l.ItemTags = tags
 	l.unique = countUnique(items)
 }
 

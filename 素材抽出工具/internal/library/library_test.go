@@ -28,7 +28,7 @@ func TestSplitLines(t *testing.T) {
 
 func TestExtractPlainCountsByLine(t *testing.T) {
 	l := newList("A", "x", "x", "y")
-	res, err := Extract([]List{l}, []PickRequest{{l.ID, 3, 1}}, testRand())
+	res, err := Extract([]List{l}, []PickRequest{{ListID: l.ID, Count: 3, Repeat: 1}}, testRand())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestExtractPlainCountsByLine(t *testing.T) {
 	if len(got) != 3 || res.Total != 3 {
 		t.Fatalf("got %q total %d", got, res.Total)
 	}
-	if _, err := Extract([]List{l}, []PickRequest{{l.ID, 4, 1}}, testRand()); err == nil {
+	if _, err := Extract([]List{l}, []PickRequest{{ListID: l.ID, Count: 4, Repeat: 1}}, testRand()); err == nil {
 		t.Fatal("expected error when count exceeds lines")
 	}
 }
@@ -44,12 +44,12 @@ func TestExtractPlainCountsByLine(t *testing.T) {
 func TestExtractRepeatUsesDistinctContentAndKeepsRunsTogether(t *testing.T) {
 	a := newList("A", "a1", "a1", "a2", "a3")
 	b := newList("B", "b1", "b2")
-	if _, err := Extract([]List{a}, []PickRequest{{a.ID, 4, 2}}, testRand()); err == nil {
+	if _, err := Extract([]List{a}, []PickRequest{{ListID: a.ID, Count: 4, Repeat: 2}}, testRand()); err == nil {
 		t.Fatal("expected error: only 3 distinct lines")
 	}
 	for seed := uint64(0); seed < 50; seed++ {
 		r := rand.New(rand.NewPCG(seed, seed))
-		res, err := Extract([]List{a, b}, []PickRequest{{a.ID, 3, 3}, {b.ID, 2, 1}}, r)
+		res, err := Extract([]List{a, b}, []PickRequest{{ListID: a.ID, Count: 3, Repeat: 3}, {ListID: b.ID, Count: 2, Repeat: 1}}, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,13 +82,13 @@ func TestExtractRepeatUsesDistinctContentAndKeepsRunsTogether(t *testing.T) {
 
 func TestExtractLimits(t *testing.T) {
 	l := newList("A", "a", "b")
-	if _, err := Extract([]List{l}, []PickRequest{{l.ID, 2, MaxOutputLines}}, testRand()); err == nil {
+	if _, err := Extract([]List{l}, []PickRequest{{ListID: l.ID, Count: 2, Repeat: MaxOutputLines}}, testRand()); err == nil {
 		t.Fatal("expected max output error")
 	}
-	if _, err := Extract([]List{l}, []PickRequest{{l.ID, 0, 1}}, testRand()); err == nil {
+	if _, err := Extract([]List{l}, []PickRequest{{ListID: l.ID, Count: 0, Repeat: 1}}, testRand()); err == nil {
 		t.Fatal("expected error for empty request")
 	}
-	if _, err := Extract([]List{l}, []PickRequest{{"missing", 1, 1}}, testRand()); err == nil {
+	if _, err := Extract([]List{l}, []PickRequest{{ListID: "missing", Count: 1, Repeat: 1}}, testRand()); err == nil {
 		t.Fatal("expected error for missing list")
 	}
 }

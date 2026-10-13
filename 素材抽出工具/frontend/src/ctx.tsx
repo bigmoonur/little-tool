@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Draft, LicenseStatus, Snapshot, View } from './types'
+import type { Draft, Extracted, LicenseStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
 import type { ConfirmOptions, PromptOptions } from './ui/Modal'
 import type { ToastOptions } from './ui/Toasts'
 import type { LoadedFile } from './lib/files'
@@ -27,6 +27,12 @@ export interface Ctx {
   go: (v: View) => Promise<boolean>
   draft: Draft
   setDraft: React.Dispatch<React.SetStateAction<Draft>>
+  repeatMode: RepeatMode
+  setRepeatMode: (v: RepeatMode) => void
+  tagFilter: string[]
+  setTagFilter: React.Dispatch<React.SetStateAction<string[]>>
+  lastExtraction: { response: Extracted; requests: PickRequest[] } | null
+  setLastExtraction: React.Dispatch<React.SetStateAction<{ response: Extracted; requests: PickRequest[] } | null>>
   selectedId: string
   select: (id: string) => Promise<boolean>
   toast: (text: string, opts?: ToastOptions) => number

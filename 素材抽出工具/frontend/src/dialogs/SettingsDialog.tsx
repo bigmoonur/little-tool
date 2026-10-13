@@ -54,7 +54,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const deactivate = async () => {
     const ok = await confirm({
       title: '解除本机授权？',
-      message: '解除后，这台电脑需要重新输入授权码才能使用；空出来的名额可以在其他电脑上激活。素材库不受影响。',
+      message: '解除后需要重新输入授权码。两款工具共用本机设备名额，另一款下次联网可能自动重新登记；换电脑前请在两款工具中都解除授权。素材库会保留。',
       confirmText: '解除授权',
       danger: true,
     })
@@ -164,7 +164,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
-        <p className="settings-version dim">素材抽出 {info.version}</p>
+        <p className="settings-version dim">链接抽取工具 {info.version}</p>
       </div>
     </Modal>
   )

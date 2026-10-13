@@ -148,7 +148,7 @@ func planImport(d *Data, plan ImportPlan, now int64) ([]List, ImportReport) {
 			st.Added = len(added)
 			st.Duplicates = len(incoming) - len(added)
 			l.setItems(append(base, added...))
-			l.UpdatedAt = now
+			l.UpdatedAt = max(l.UpdatedAt+1, now)
 			lists[i] = l
 			touched[l.ID] = true
 

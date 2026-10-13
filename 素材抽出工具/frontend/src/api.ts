@@ -2,7 +2,7 @@
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
 import type {
-  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, Pick, PickRequest, Settings, Snapshot,
+  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, ListInfo, ListItems, Pick, PickRequest, Settings, Snapshot,
 } from './types'
 
 type Created = { snapshot: Snapshot; id: string }
@@ -29,11 +29,18 @@ export const api = {
   setListText: (id: string, text: string) => call<Snapshot>('SetListText', id, text),
   dedupeList: (id: string) => call<{ snapshot: Snapshot; removed: number }>('DedupeList', id),
 
+  createTag: (name: string) => call<Created>('CreateTag', name),
+  renameTag: (id: string, name: string) => call<Snapshot>('RenameTag', id, name),
+  deleteTag: (id: string) => call<Snapshot>('DeleteTag', id),
+  listItems: (id: string) => call<ListItems>('ListItems', id),
+  setItemTags: (id: string, indexes: number[], tagIds: string[], updatedAt: number, action: 'set' | 'add' | 'remove') => call<Snapshot>('SetItemTags', id, indexes, tagIds, updatedAt, action),
+  availableLists: (tagIds: string[]) => call<ListInfo[]>('AvailableLists', tagIds),
+
   previewImport: (plan: ImportPlan) => call<ImportReport>('PreviewImport', plan),
   applyImport: (plan: ImportPlan) => call<{ snapshot: Snapshot; report: ImportReport }>('ApplyImport', plan),
 
   extract: (reqs: PickRequest[]) => call<Extracted>('Extract', reqs),
-  copyText: (text: string) => call<void>('CopyText', text),
+  copyText: (text: string) => call<void>('CopyText', text).then(() => true),
   saveDraft: (draft: Record<string, Pick>) => call<void>('SaveDraft', draft),
 
   savePreset: (name: string, picks: Record<string, Pick>) => call<Created>('SavePreset', name, picks),

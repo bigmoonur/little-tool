@@ -3,20 +3,35 @@ package library
 import (
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strings"
 )
 
+const (
+	RepeatConsecutive = "consecutive"
+	RepeatCycle       = "cycle"
+	RepeatRandom      = "random"
+)
+
+func validRepeatMode(mode string) bool {
+	return mode == "" || mode == RepeatConsecutive || mode == RepeatCycle || mode == RepeatRandom
+}
+
 type PickRequest struct {
-	ListID string `json:"listId"`
-	Count  int    `json:"count"`
-	Repeat int    `json:"repeat"`
+	ListID string   `json:"listId"`
+	Count  int      `json:"count"`
+	Repeat int      `json:"repeat"`
+	Mode   string   `json:"mode,omitempty"`
+	TagIDs []string `json:"tagIds,omitempty"`
 }
 
 type PickPart struct {
-	ListID string `json:"listId"`
-	Name   string `json:"name"`
-	Count  int    `json:"count"`
-	Repeat int    `json:"repeat"`
+	ListID string   `json:"listId"`
+	Name   string   `json:"name"`
+	Count  int      `json:"count"`
+	Repeat int      `json:"repeat"`
+	Mode   string   `json:"mode,omitempty"`
+	TagIDs []string `json:"tagIds,omitempty"`
 }
 
 type ExtractResult struct {
@@ -25,27 +40,20 @@ type ExtractResult struct {
 	Parts []PickPart `json:"parts"`
 }
 
-type group struct {
-	line   string
-	repeat int
-}
-
-// Extract 按请求从各分类抽取素材。
-//
-// 普通数量按行抽取；重复次数大于 1 时先按内容去重，确保抽中的内容各不相同。
-// 所有分类抽中的内容先按组混合打乱，再展开重复次数，同一组的重复行保持连续。
+// Extract 按标签筛选后抽取。连续重复保留旧版行为；循环重复重用同一批；分轮随机每轮独立抽样。
 func Extract(lists []List, reqs []PickRequest, r *rand.Rand) (ExtractResult, error) {
 	byID := make(map[string]*List, len(lists))
 	for i := range lists {
 		byID[lists[i].ID] = &lists[i]
 	}
-
 	type job struct {
 		list *List
 		req  PickRequest
+		pool []string
 	}
 	var jobs []job
 	total := 0
+	mode := ""
 	for _, req := range reqs {
 		if req.Count == 0 {
 			continue
@@ -54,66 +62,122 @@ func Extract(lists []List, reqs []PickRequest, r *rand.Rand) (ExtractResult, err
 		if !ok {
 			return ExtractResult{}, userErr("有分类已被删除，请检查后重试")
 		}
+		if !validRepeatMode(req.Mode) {
+			return ExtractResult{}, userErr("不支持的乘数规则")
+		}
+		if req.Mode == "" {
+			req.Mode = RepeatConsecutive
+		}
+		if mode != "" && mode != req.Mode {
+			return ExtractResult{}, userErr("一次抽取请使用相同的乘数规则")
+		}
+		mode = req.Mode
 		if req.Count < 0 {
 			return ExtractResult{}, userErr("「%s」的数量不能小于 0", l.Name)
 		}
 		if req.Repeat < 1 {
-			return ExtractResult{}, userErr("「%s」的重复次数至少为 1", l.Name)
+			return ExtractResult{}, userErr("「%s」的乘数至少为 1", l.Name)
 		}
-		if req.Repeat > 1 {
-			if req.Count > l.unique {
-				return ExtractResult{}, userErr("「%s」最多可抽取 %s 条不同内容", l.Name, thousands(l.unique))
+		pool := matchingItems(*l, req.TagIDs)
+		if req.Repeat > 1 || mode == RepeatRandom {
+			pool = dedupe(pool)
+		}
+		if req.Count > len(pool) {
+			what := "文本"
+			if req.Repeat > 1 || mode == RepeatRandom {
+				what = "不同内容"
 			}
-		} else if req.Count > len(l.Items) {
-			return ExtractResult{}, userErr("「%s」最多可抽取 %s 条", l.Name, thousands(len(l.Items)))
+			return ExtractResult{}, userErr("「%s」当前最多可抽取 %s 条%s", l.Name, thousands(len(pool)), what)
 		}
-		if req.Repeat > MaxOutputLines || req.Count*req.Repeat > MaxOutputLines {
-			return ExtractResult{}, userErr("一次最多输出 %s 条，请减小数量或重复次数", thousands(MaxOutputLines))
+		// 先除后乘，避免来自绑定的极大整数溢出。
+		if req.Repeat > MaxOutputLines || req.Count > MaxOutputLines/req.Repeat {
+			return ExtractResult{}, userErr("一次最多输出 %s 条，请减小数量或乘数", thousands(MaxOutputLines))
 		}
 		total += req.Count * req.Repeat
 		if total > MaxOutputLines {
-			return ExtractResult{}, userErr("合计最多输出 %s 条，请减小数量或重复次数", thousands(MaxOutputLines))
+			return ExtractResult{}, userErr("合计最多输出 %s 条，请减小数量或乘数", thousands(MaxOutputLines))
 		}
-		jobs = append(jobs, job{l, req})
+		jobs = append(jobs, job{l, req, pool})
 	}
 	if total == 0 {
 		return ExtractResult{}, userErr("请至少为一个分类填写数量")
 	}
 
-	var groups []group
 	parts := make([]PickPart, 0, len(jobs))
 	for _, j := range jobs {
-		pool := j.list.Items
-		if j.req.Repeat > 1 {
-			pool = dedupe(pool)
-		}
-		for _, line := range sample(pool, j.req.Count, r) {
-			groups = append(groups, group{line, j.req.Repeat})
-		}
-		parts = append(parts, PickPart{
-			ListID: j.list.ID,
-			Name:   j.list.Name,
-			Count:  j.req.Count,
-			Repeat: j.req.Repeat,
-		})
+		parts = append(parts, PickPart{ListID: j.list.ID, Name: j.list.Name, Count: j.req.Count, Repeat: j.req.Repeat, Mode: mode, TagIDs: slices.Clone(j.req.TagIDs)})
 	}
-
-	r.Shuffle(len(groups), func(a, b int) { groups[a], groups[b] = groups[b], groups[a] })
-
-	var sb strings.Builder
-	for i, g := range groups {
-		for k := 0; k < g.repeat; k++ {
-			if i > 0 || k > 0 {
-				sb.WriteByte('\n')
+	type selected struct {
+		line   string
+		repeat int
+	}
+	base := []selected{}
+	if mode != RepeatRandom {
+		for _, j := range jobs {
+			for _, line := range sample(j.pool, j.req.Count, r) {
+				base = append(base, selected{line, j.req.Repeat})
 			}
-			sb.WriteString(g.line)
+		}
+		r.Shuffle(len(base), func(a, b int) { base[a], base[b] = base[b], base[a] })
+	}
+	lines := make([]string, 0, total)
+	switch mode {
+	case RepeatConsecutive:
+		for _, item := range base {
+			for range item.repeat {
+				lines = append(lines, item.line)
+			}
+		}
+	case RepeatCycle:
+		for round := 0; len(base) > 0; round++ {
+			next := base[:0]
+			for _, item := range base {
+				lines = append(lines, item.line)
+				if round+1 < item.repeat {
+					next = append(next, item)
+				}
+			}
+			base = next
+		}
+	case RepeatRandom:
+		for round := 0; len(jobs) > 0; round++ {
+			batch := []string{}
+			next := jobs[:0]
+			for _, j := range jobs {
+				batch = append(batch, sample(j.pool, j.req.Count, r)...)
+				if round+1 < j.req.Repeat {
+					next = append(next, j)
+				}
+			}
+			jobs = next
+			r.Shuffle(len(batch), func(a, b int) { batch[a], batch[b] = batch[b], batch[a] })
+			lines = append(lines, batch...)
 		}
 	}
-	return ExtractResult{Text: sb.String(), Total: total, Parts: parts}, nil
+	return ExtractResult{Text: strings.Join(lines, "\n"), Total: total, Parts: parts}, nil
 }
 
 // sample 不放回地随机取 n 个元素。
 func sample(items []string, n int, r *rand.Rand) []string {
+	// 小样本用稀疏交换表，分轮重抽无需每轮复制整个素材池。
+	if n < len(items)/4 {
+		swaps := make(map[int]int, n)
+		at := func(i int) int {
+			if v, ok := swaps[i]; ok {
+				return v
+			}
+			return i
+		}
+		out := make([]string, n)
+		for i := range n {
+			j := i + r.IntN(len(items)-i)
+			picked := at(j)
+			swaps[j] = at(i)
+			delete(swaps, i)
+			out[i] = items[picked]
+		}
+		return out
+	}
 	idx := make([]int, len(items))
 	for i := range idx {
 		idx[i] = i

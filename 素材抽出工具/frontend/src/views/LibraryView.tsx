@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { CopyMinus, Download, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CopyMinus, Download, FileText, Pencil, Plus, Tags, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { loadFiles, pickFiles } from '../lib/files'
@@ -8,7 +8,8 @@ import type { ListInfo } from '../types'
 import { EmptyLibrary } from './EmptyLibrary'
 import { ListEditor } from './ListEditor'
 import { LibrarySidebar, useDeleteList } from './LibrarySidebar'
-import { buildSections } from './ExtractView'
+import { buildSections } from '../lib/reorder'
+import { TextTagDialog } from '../dialogs/TextTagDialog'
 
 export function LibraryView() {
   const { snap, selectedId, select } = useApp()
@@ -20,10 +21,6 @@ export function LibraryView() {
     if (!list && first) select(first.id)
   }, [list, snap.lists, snap.groups])
 
-  if (!snap.lists.length && !snap.groups.length) {
-    return <EmptyLibrary title="添加第一批素材" lead="素材按分类保存，抽取时为每个分类填写数量。" />
-  }
-
   return (
     <div className="library">
       <LibrarySidebar />
@@ -31,7 +28,7 @@ export function LibraryView() {
         {list ? (
           <ListDetail key={list.id} list={list} />
         ) : (
-          <EmptyLibrary title="这里还没有分类" lead="可以先在左侧新建分类，或者直接添加素材。" />
+          <EmptyLibrary title="添加第一批素材" lead="可以先新建分组，再把素材直接添加到分组里；也可以不分组，直接添加。" />
         )}
       </section>
     </div>
@@ -39,9 +36,15 @@ export function LibraryView() {
 }
 
 function ListDetail({ list }: { list: ListInfo }) {
-  const { snap, setSnap, run, prompt, toast, commit, openImport } = useApp()
+  const { snap, setSnap, run, prompt, toast, commit, openImport, leave } = useApp()
   const { deleteList } = useDeleteList()
   const dupes = list.count - list.unique
+  const [tagsOpen, setTagsOpen] = useState(false)
+
+  // 标签按行号贴在文本上：编辑器里有未保存的修改时先保存或放弃，再打开，避免标签贴错文本。
+  const openTags = async () => {
+    if (await leave()) setTagsOpen(true)
+  }
 
   const rename = async () => {
     const name = await prompt({ title: '重命名分类', label: '分类名称', initial: list.name, confirmText: '重命名' })
@@ -111,6 +114,15 @@ function ListDetail({ list }: { list: ListInfo }) {
             <FileText size={16} />
             从 TXT 导入
           </button>
+          <button
+            className="btn btn-tags"
+            onClick={openTags}
+            disabled={list.count === 0}
+            title={list.count === 0 ? '先添加素材并保存，再给文本设置标签' : '给这个分类里的每条文本设置标签'}
+          >
+            <Tags size={18} />
+            文本标签
+          </button>
           <button className="btn" onClick={exportList} disabled={list.count === 0}>
             <Download size={16} />
             导出 TXT
@@ -129,6 +141,7 @@ function ListDetail({ list }: { list: ListInfo }) {
         </div>
       </header>
       <ListEditor list={list} />
+      {tagsOpen && <TextTagDialog list={list} onClose={() => setTagsOpen(false)} />}
     </div>
   )
 }

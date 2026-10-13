@@ -18,9 +18,16 @@ export interface ListInfo {
   updatedAt: number
 }
 
+export interface Tag { id: string; name: string }
+export interface TextItem { index: number; text: string; tagIds: string[] }
+export interface ListItems { items: TextItem[]; updatedAt: number }
+export type RepeatMode = 'consecutive' | 'cycle' | 'random'
+
 export interface Pick {
   count: number
   repeat: number
+  mode?: RepeatMode
+  tagIds?: string[]
 }
 
 export interface Preset {
@@ -42,6 +49,7 @@ export interface Settings {
 
 export interface Snapshot {
   groups: Group[]
+  tags: Tag[]
   lists: ListInfo[]
   presets: Preset[]
   draft: Record<string, Pick>
@@ -61,6 +69,8 @@ export interface PickRequest {
   listId: string
   count: number
   repeat: number
+  mode?: RepeatMode
+  tagIds?: string[]
 }
 
 export interface PickPart {
@@ -68,6 +78,8 @@ export interface PickPart {
   name: string
   count: number
   repeat: number
+  mode?: RepeatMode
+  tagIds?: string[]
 }
 
 export interface ExtractResult {

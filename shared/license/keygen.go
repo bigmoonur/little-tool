@@ -3,6 +3,7 @@ package license
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -10,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
+	"math/big"
 	"net/http"
 	"regexp"
 	"strings"
@@ -75,12 +76,14 @@ type machineData struct {
 }
 
 type client struct {
-	http *http.Client
-	ua   string
+	http      *http.Client
+	ua        string
+	baseURL   string
+	publicKey string
 }
 
 func newClient(version string) *client {
-	return &client{http: &http.Client{Timeout: 20 * time.Second}, ua: "MaterialPicker/" + version}
+	return &client{http: &http.Client{Timeout: 20 * time.Second}, ua: "MaterialPicker/" + version, baseURL: apiBase, publicKey: PublicKey}
 }
 
 // request 发送请求并校验响应签名。HTTP 状态码不在这里判断，由调用方处理。
@@ -93,7 +96,7 @@ func (c *client) request(method, path, key string, payload any) (int, signed, er
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, apiBase+path, body)
+	req, err := http.NewRequest(method, c.baseURL+path, body)
 	if err != nil {
 		return 0, signed{}, err
 	}
@@ -124,7 +127,7 @@ func (c *client) request(method, path, key string, payload any) (int, signed, er
 		Signature: resp.Header.Get("Keygen-Signature"),
 		Body:      string(raw),
 	}
-	if err := verify(s); err != nil {
+	if err := verifyWithKey(s, c.publicKey); err != nil {
 		return 0, signed{}, err
 	}
 	return resp.StatusCode, s, nil
@@ -132,12 +135,13 @@ func (c *client) request(method, path, key string, payload any) (int, signed, er
 
 var sigParam = regexp.MustCompile(`(\w+)="([^"]*)"`)
 
-// verify 按 Keygen 的规则校验 Ed25519 签名；未配置公钥时跳过。
+// verify 按 Keygen 的规则校验 Ed25519 签名，缺少公钥时也必须拒绝。
 func verify(s signed) error {
-	if PublicKey == "" {
-		return nil
-	}
-	pub, err := hex.DecodeString(strings.TrimSpace(PublicKey))
+	return verifyWithKey(s, PublicKey)
+}
+
+func verifyWithKey(s signed, publicKey string) error {
+	pub, err := hex.DecodeString(strings.TrimSpace(publicKey))
 	if err != nil || len(pub) != ed25519.PublicKeySize {
 		return fmt.Errorf("授权公钥配置错误")
 	}
@@ -145,7 +149,7 @@ func verify(s signed) error {
 	for _, m := range sigParam.FindAllStringSubmatch(s.Signature, -1) {
 		params[m[1]] = m[2]
 	}
-	if params["algorithm"] != "ed25519" || params["keyid"] != AccountID {
+	if params["algorithm"] != "ed25519" || params["keyid"] != AccountID || params["headers"] != "(request-target) host date digest" {
 		return errSignature
 	}
 	sig, err := base64.StdEncoding.DecodeString(params["signature"])
@@ -158,6 +162,9 @@ func verify(s signed) error {
 	if !ed25519.Verify(pub, []byte(data), sig) {
 		return errSignature
 	}
+	if _, err := http.ParseTime(s.Date); err != nil {
+		return errSignature
+	}
 	return nil
 }
 
@@ -165,7 +172,12 @@ func accountPath(rest string) string { return "/v1/accounts/" + AccountID + rest
 
 // validate 校验授权码，限定本产品、本策略和本机指纹，并用随机数防止重放旧响应。
 func (c *client) validate(key, fingerprint string) (validation, signed, error) {
-	nonce := rand.Int64N(1 << 40)
+	// 保持在 JSON 精确整数范围内，使用密码学随机源生成挑战值。
+	n, err := rand.Int(rand.Reader, big.NewInt(1<<52))
+	if err != nil {
+		return validation{}, signed{}, fmt.Errorf("无法生成授权验证随机数：%w", err)
+	}
+	nonce := n.Int64()
 	payload := map[string]any{
 		"meta": map[string]any{
 			"key":   key,
@@ -173,19 +185,27 @@ func (c *client) validate(key, fingerprint string) (validation, signed, error) {
 			"scope": map[string]any{"product": ProductID, "policy": PolicyID, "fingerprint": fingerprint},
 		},
 	}
-	_, s, err := c.request("POST", accountPath("/licenses/actions/validate-key"), "", payload)
+	status, s, err := c.request("POST", accountPath("/licenses/actions/validate-key"), "", payload)
 	if err != nil {
 		return validation{}, s, err
 	}
 	var v validation
 	if err := json.Unmarshal([]byte(s.Body), &v); err != nil {
-		return validation{}, s, &netError{err}
+		return validation{}, s, errSignature
 	}
 	if len(v.Errors) > 0 {
 		return v, s, apiErr(v.Errors)
 	}
-	if v.Meta.Nonce != nonce || v.Meta.Scope.Fingerprint != fingerprint || v.Meta.Scope.Product != ProductID {
+	if status < 200 || status >= 300 || v.Meta.Nonce != nonce || v.Meta.Scope.Fingerprint != fingerprint || v.Meta.Scope.Product != ProductID || v.Meta.Scope.Policy != PolicyID {
 		return validation{}, s, errSignature
+	}
+	if v.Meta.Valid && (v.Data == nil || v.Data.ID == "") {
+		return validation{}, s, errSignature
+	}
+	if v.Meta.Valid && v.Data.Attributes.Expiry != nil {
+		if _, err := time.Parse(time.RFC3339, *v.Data.Attributes.Expiry); err != nil {
+			return validation{}, s, errSignature
+		}
 	}
 	return v, s, nil
 }

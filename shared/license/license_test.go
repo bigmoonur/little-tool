@@ -20,10 +20,11 @@ import (
 
 // fakeKeygen 模拟 Keygen 的几个接口，并像真实服务器一样对响应签名。
 type fakeKeygen struct {
-	mu          sync.Mutex
-	priv        ed25519.PrivateKey
-	licenses    map[string]*fakeLicense // key -> license
-	validations int
+	mu                  sync.Mutex
+	priv                ed25519.PrivateKey
+	licenses            map[string]*fakeLicense // key -> license
+	validations         int
+	transformValidation func(map[string]any)
 }
 
 type fakeLicense struct {
@@ -31,6 +32,7 @@ type fakeLicense struct {
 	status   string // ACTIVE / SUSPENDED
 	max      int
 	machines map[string]bool
+	expiry   *string
 }
 
 func newFake(t *testing.T) (*fakeKeygen, *httptest.Server) {
@@ -103,9 +105,13 @@ func (f *fakeKeygen) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			meta["valid"], meta["code"] = true, "VALID"
 		}
 		if l != nil {
-			data = map[string]any{"id": l.id, "type": "licenses", "attributes": map[string]any{"status": l.status, "expiry": nil}}
+			data = map[string]any{"id": l.id, "type": "licenses", "attributes": map[string]any{"status": l.status, "expiry": l.expiry}}
 		}
-		f.write(w, r, 200, map[string]any{"meta": meta, "data": data})
+		out := map[string]any{"meta": meta, "data": data}
+		if f.transformValidation != nil {
+			f.transformValidation(out)
+		}
+		f.write(w, r, 200, out)
 
 	case r.Method == "POST" && r.URL.Path == base+"/machines":
 		l := f.byAuth(r)
@@ -170,6 +176,30 @@ func TestActivateValidateAndRestart(t *testing.T) {
 	m2 := New(dir, "test")
 	if st := m2.Refresh(); st.State != StateActive || st.Masked == "" {
 		t.Fatalf("restart: %+v", st)
+	}
+}
+
+func TestTwoToolsShareOneMachineSlot(t *testing.T) {
+	if raw, err := rawMachineID(); err != nil || strings.TrimSpace(raw) == "" {
+		t.Skip("requires a stable system machine identifier")
+	}
+	f, _ := newFake(t)
+	f.licenses["GOOD-KEY"].max = 1
+	text := New(t.TempDir(), "text-test")
+	video := New(t.TempDir(), "video-test")
+	if text.fp != video.fp {
+		t.Fatal("the two tools produced different fingerprints for this computer")
+	}
+	for _, m := range []*Manager{text, video} {
+		st, err := m.Activate("GOOD-KEY")
+		if err != nil || st.State != StateActive {
+			t.Fatalf("same-computer activation consumed another slot: %+v %v", st, err)
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if got := len(f.licenses["GOOD-KEY"].machines); got != 1 {
+		t.Fatalf("expected one shared device, got %d", got)
 	}
 }
 

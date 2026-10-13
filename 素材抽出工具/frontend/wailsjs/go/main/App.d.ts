@@ -8,6 +8,8 @@ export function ActivateLicense(arg1:string):Promise<license.Status>;
 
 export function ApplyImport(arg1:library.ImportPlan):Promise<main.Imported>;
 
+export function AvailableLists(arg1:Array<string>):Promise<Array<library.ListInfo>>;
+
 export function ClearHistory():Promise<void>;
 
 export function ConfirmClose():Promise<void>;
@@ -18,6 +20,8 @@ export function CreateGroup(arg1:string):Promise<main.Created>;
 
 export function CreateList(arg1:string,arg2:string):Promise<main.Created>;
 
+export function CreateTag(arg1:string):Promise<main.Created>;
+
 export function DeactivateLicense():Promise<license.Status>;
 
 export function DedupeList(arg1:string):Promise<main.Deduped>;
@@ -27,6 +31,8 @@ export function DeleteGroup(arg1:string,arg2:boolean):Promise<library.Snapshot>;
 export function DeleteList(arg1:string):Promise<library.Snapshot>;
 
 export function DeletePreset(arg1:string):Promise<library.Snapshot>;
+
+export function DeleteTag(arg1:string):Promise<library.Snapshot>;
 
 export function ExportBackup():Promise<string>;
 
@@ -43,6 +49,8 @@ export function HoldClose():Promise<void>;
 export function Init():Promise<main.InitInfo>;
 
 export function LicenseStatus():Promise<license.Status>;
+
+export function ListItems(arg1:string):Promise<library.ListItems>;
 
 export function ListText(arg1:string):Promise<string>;
 
@@ -62,6 +70,8 @@ export function RenameList(arg1:string,arg2:string):Promise<library.Snapshot>;
 
 export function RenamePreset(arg1:string,arg2:string):Promise<library.Snapshot>;
 
+export function RenameTag(arg1:string,arg2:string):Promise<library.Snapshot>;
+
 export function RestoreBackup():Promise<main.Restored>;
 
 export function SaveDraft(arg1:Record<string, library.Pick>):Promise<void>;
@@ -73,6 +83,8 @@ export function SaveTextFile(arg1:string,arg2:string):Promise<string>;
 export function SetGroupCollapsed(arg1:string,arg2:boolean):Promise<library.Snapshot>;
 
 export function SetGroupColor(arg1:string,arg2:string):Promise<library.Snapshot>;
+
+export function SetItemTags(arg1:string,arg2:Array<number>,arg3:Array<string>,arg4:number,arg5:string):Promise<library.Snapshot>;
 
 export function SetListText(arg1:string,arg2:string):Promise<library.Snapshot>;
 

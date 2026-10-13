@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"materialpicker/internal/library"
-	"materialpicker/internal/license"
 
+	"github.com/bigmoonur/little-tool/shared/license"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -19,9 +19,6 @@ import (
 var assets embed.FS
 
 const appID = "MaterialPicker"
-
-// licenseBypass 只在开发构建（wails dev -tags devlicense）中为 true，发布版本始终需要授权。
-var licenseBypass bool
 
 // dataDir 返回数据目录。程序旁有 data 文件夹时使用便携模式，数据跟随程序。
 func dataDir() (string, error) {
@@ -84,7 +81,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "素材抽出",
+		Title:            "链接抽取工具",
 		Width:            width,
 		Height:           height,
 		MinWidth:         860,
@@ -108,7 +105,7 @@ func main() {
 			IsZoomControlEnabled: false,
 		},
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "素材抽出", Message: "版本 " + AppVersion},
+			About: &mac.AboutInfo{Title: "链接抽取工具", Message: "版本 " + AppVersion},
 		},
 	})
 	if err != nil {

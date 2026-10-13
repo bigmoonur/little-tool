@@ -5,16 +5,16 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "素材抽出"
+    !define INFO_PROJECTNAME "链接抽取工具"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "素材抽出"
+    !define INFO_COMPANYNAME "链接抽取工具"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "素材抽出"
+    !define INFO_PRODUCTNAME "链接抽取工具"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.1.7"
+    !define INFO_PRODUCTVERSION "1.2.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026"

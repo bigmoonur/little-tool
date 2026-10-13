@@ -1,0 +1,206 @@
+name: Windows release build
+
+on:
+  push:
+    paths:
+      - '素材抽出工具/**'
+      - '视频随机提取工具/**'
+      - 'shared/license/**'
+      - '.github/workflows/windows-build.yml'
+      - '.github/scripts/scan-windows-package.ps1'
+  workflow_dispatch:
+    inputs:
+      with_obfuscation:
+        description: 'Optional Garble obfuscation; default builds keep all license protections without Garble'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}-${{ inputs.with_obfuscation && 'garble' || 'no-garble' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.program }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - directory: 素材抽出工具
+            program: 链接抽取工具
+            key: text
+            data_env: MATERIAL_PICKER_DATA
+            artifact: windows-release
+          - directory: 视频随机提取工具
+            program: 视频随机提取工具
+            key: video
+            data_env: VIDEO_PICKER_DATA
+            artifact: windows-release-video
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ matrix.directory }}
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: ''
+      WITH_OBFUSCATION: ${{ inputs.with_obfuscation || false }}
+      PROGRAM: ${{ matrix.program }}
+      DATA_ENV: ${{ matrix.data_env }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.27.2'
+          # Previous Windows runs stalled while saving the Go cache after packaging.
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory }}/frontend/package-lock.json
+      - name: Install pinned build tools
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+          if ($LASTEXITCODE -ne 0) { throw 'Wails installation failed' }
+          if ($env:WITH_OBFUSCATION -eq 'true') {
+            go install mvdan.cc/garble@v0.18.0
+            if ($LASTEXITCODE -ne 0) { throw 'Garble installation failed' }
+          }
+          # windows-2022 已预装 NSIS，显式确认工具可用。
+          $env:PATH += ";${env:ProgramFiles(x86)}\NSIS"
+          Get-Command makensis -ErrorAction Stop
+          "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
+      - name: Test and build Windows release
+        run: ./build.ps1 -WithObfuscation:($env:WITH_OBFUSCATION -eq 'true')
+      - name: Scan release ZIP and executables with updated Defender
+        shell: powershell
+        run: |
+          $packageDir = Join-Path $env:RUNNER_TEMP 'defender-package'
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          Get-ChildItem -LiteralPath dist -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } |
+            Copy-Item -Destination $packageDir
+          & ../.github/scripts/scan-windows-package.ps1 -PackageDirectory $packageDir `
+            -ReportDirectory (Join-Path $env:RUNNER_TEMP 'defender-report')
+      - name: Verify installer silently installs the built application
+        run: |
+          $installer = (Resolve-Path "build/bin/$env:PROGRAM-amd64-installer.exe").Path
+          $setup = Start-Process -FilePath $installer -ArgumentList '/S' -PassThru -Wait
+          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
+          $installed = Join-Path $env:LOCALAPPDATA "Programs/$env:PROGRAM/$env:PROGRAM.exe"
+          if (-not (Test-Path -LiteralPath $installed)) { throw 'Installed application is missing' }
+          if ((Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath "build/bin/$env:PROGRAM.exe").Hash) {
+            throw 'Installer did not include the expected application'
+          }
+      - name: Smoke test Windows application startup
+        run: |
+          [Environment]::SetEnvironmentVariable($env:DATA_ENV, (Join-Path $env:RUNNER_TEMP 'picker-smoke'), 'Process')
+          $process = Start-Process -FilePath (Resolve-Path "build/bin/$env:PROGRAM.exe").Path -PassThru
+          try {
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            do {
+              Start-Sleep -Seconds 2
+              $process.Refresh()
+              if ($process.HasExited) { throw "Application exited during startup: $($process.ExitCode)" }
+            } while ($process.MainWindowHandle -eq 0 -and [DateTime]::UtcNow -lt $deadline)
+            if ($process.MainWindowHandle -eq 0) { throw 'Application did not create a window' }
+            Start-Sleep -Seconds 5
+            $process.Refresh()
+            if ($process.HasExited -or -not $process.Responding) { throw 'Application crashed or stopped responding' }
+            Write-Host "Started window: $($process.MainWindowTitle)"
+            # 保存启动画面以便检查 WebView 和中文激活界面，截图失败不影响功能测试。
+            try {
+              Add-Type -AssemblyName System.Windows.Forms
+              Add-Type -AssemblyName System.Drawing
+              $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $image = [Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+              $graphics = [Drawing.Graphics]::FromImage($image)
+              try {
+                $graphics.CopyFromScreen($bounds.Location, [Drawing.Point]::Empty, $bounds.Size)
+                $image.Save((Join-Path $env:RUNNER_TEMP 'picker-startup.png'))
+              } finally { $graphics.Dispose(); $image.Dispose() }
+            } catch { Write-Warning $_ }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - name: Check Defender history after installation and startup
+        shell: powershell
+        run: |
+          $detections = @(Get-MpThreatDetection | Select-Object ThreatID, Resources, ProcessName, InitialDetectionTime, ActionSuccess)
+          $threats = @(Get-MpThreat | Select-Object ThreatID, ThreatName, IsActive, Resources)
+          ConvertTo-Json -InputObject $detections -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-detections.json') -Encoding utf8
+          ConvertTo-Json -InputObject $threats -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-threats.json') -Encoding utf8
+          $releaseRoots = @(
+            $env:GITHUB_WORKSPACE,
+            (Join-Path $env:RUNNER_TEMP 'defender-package'),
+            (Join-Path $env:RUNNER_TEMP 'picker-smoke'),
+            (Join-Path $env:LOCALAPPDATA "Programs/$env:PROGRAM")
+          )
+          function Test-ReleaseDetection($detection) {
+            foreach ($resource in @($detection.Resources) + @($detection.ProcessName)) {
+              foreach ($root in $releaseRoots) {
+                if (([string]$resource).IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+              }
+            }
+            return $false
+          }
+          $releaseDetections = @($detections | Where-Object { Test-ReleaseDetection $_ })
+          ConvertTo-Json -InputObject $releaseDetections -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/post-startup-release-detections.json') -Encoding utf8
+          if ($releaseDetections.Count) {
+            $releaseDetections | Format-List
+            throw 'Defender detected the release files or application during installation/startup'
+          }
+          if ($detections.Count) {
+            Write-Warning 'Additional runner detections are recorded in windows-defender-report. Review their resources and threat names.'
+            $detections | Format-List
+          }
+      - name: Verify release outputs
+        run: |
+          $files = Get-ChildItem -LiteralPath dist -Recurse -File
+          if (@($files | Where-Object Extension -eq '.exe').Count -ne 2) { throw 'Expected portable EXE and installer' }
+          if (@($files | Where-Object Extension -eq '.zip').Count -ne 1) { throw 'Expected one release ZIP' }
+          # Confirm the distributed files still match those inspected by Defender.
+          $scanHashes = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'defender-report/package-hashes.json') -Raw | ConvertFrom-Json
+          foreach ($file in @($files | Where-Object { $_.Extension -in '.exe', '.zip' })) {
+            $verified = @($scanHashes | Where-Object { [IO.Path]::GetFileName($_.File) -eq $file.Name })
+            if ($verified.Count -ne 1 -or (Get-FileHash -LiteralPath $file.FullName).Hash -ne $verified[0].SHA256) {
+              throw "Release file differs from the scanned file: $($file.Name)"
+            }
+          }
+          $files | Format-Table Name, Length
+          "### Windows package" >> $env:GITHUB_STEP_SUMMARY
+          "Download the release ZIP from the **${{ matrix.artifact }}** artifact below." >> $env:GITHUB_STEP_SUMMARY
+          "Garble enabled: $env:WITH_OBFUSCATION. All license checks and the existing seven-day offline grace period remain enabled." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.directory }}/dist/*.zip
+            ${{ matrix.directory }}/dist/*.sha256
+            ${{ matrix.directory }}/dist/build-info.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-defender-report-${{ matrix.key }}
+          path: ${{ runner.temp }}/defender-report
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-startup-screenshot-${{ matrix.key }}
+          path: ${{ runner.temp }}/picker-startup.png
+          if-no-files-found: ignore
+          retention-days: 14
