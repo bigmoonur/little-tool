@@ -55,7 +55,21 @@ try {
         -DisableBlockAtFirstSeen $false -MAPSReporting 2 -SubmitSamplesConsent 2 -PUAProtection 1 `
         -ScanAvgCPULoadFactor 50
     # Automatic sample submission stays disabled; binaries are not uploaded for public analysis.
-    Update-MpSignature -UpdateSource MMPC
+    # The definitions download fails now and then on hosted runners. Retry before giving up;
+    # a scan with definitions that could not be updated is still rejected.
+    $updateError = $null
+    foreach ($attempt in 1..3) {
+        try {
+            Update-MpSignature -UpdateSource MMPC -ErrorAction Stop
+            $updateError = $null
+            break
+        } catch {
+            $updateError = $_
+            Write-Host "Defender definitions update attempt $attempt of 3 failed: $_"
+            if ($attempt -lt 3) { Start-Sleep -Seconds 20 }
+        }
+    }
+    if ($updateError) { throw $updateError }
     # Protection can take a few seconds to start after changing the runner defaults.
     $readyDeadline = [DateTime]::UtcNow.AddSeconds(60)
     do {

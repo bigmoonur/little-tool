@@ -231,3 +231,13 @@ func TestRestoreRejectsForeignJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNewLibraryIsNotPinnedByDefault(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Snapshot().Settings.AlwaysOnTop {
+		t.Fatal("a fresh library must not start always-on-top")
+	}
+}

@@ -32,7 +32,7 @@ func TestUnlicensedMutationsCannotChangeUserData(t *testing.T) {
 		"create tag":     func() error { _, e := a.CreateTag("test"); return e },
 		"rename tag":     func() error { _, e := a.RenameTag("id", "test"); return e },
 		"delete tag":     func() error { _, e := a.DeleteTag("id"); return e },
-		"tag text":       func() error { _, e := a.SetItemTags("id", []int{0}, []string{"tag"}, 0, "set"); return e },
+		"tag text":       func() error { _, e := a.SetListTags("id", []string{"tag"}); return e },
 		"undo":           func() error { _, e := a.Undo(); return e },
 		"import":         func() error { _, e := a.ApplyImport(library.ImportPlan{}); return e },
 		"extract":        func() error { _, e := a.Extract(nil); return e },

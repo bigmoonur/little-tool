@@ -81,7 +81,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "视频随机提取工具",
+		Title:            "视频分发工具",
 		Width:            width,
 		Height:           height,
 		MinWidth:         880,
@@ -91,7 +91,7 @@ func main() {
 		// 仅供开发时在浏览器里调试界面，不弹出原生窗口。
 		StartHidden:      os.Getenv("VIDEO_PICKER_HIDDEN") == "1",
 		BackgroundColour: bg,
-		AssetServer:      &assetserver.Options{Assets: assets},
+		AssetServer:      &assetserver.Options{Assets: assets, Handler: app.assetHandler()},
 		OnStartup:        app.startup,
 		OnBeforeClose:    app.beforeClose,
 		SingleInstanceLock: &options.SingleInstanceLock{
@@ -105,7 +105,7 @@ func main() {
 			IsZoomControlEnabled: false,
 		},
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "视频随机提取工具", Message: "版本 " + AppVersion},
+			About: &mac.AboutInfo{Title: "视频分发工具", Message: "版本 " + AppVersion},
 		},
 	})
 	if err != nil {

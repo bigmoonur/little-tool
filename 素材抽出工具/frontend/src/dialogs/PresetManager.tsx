@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { num, partLabel } from '../lib/format'
-import { picksRule, ruleNote } from '../lib/pick'
+import { ruleNote } from '../lib/pick'
 import { Modal } from '../ui/Modal'
 
 export function PresetManager({ onClose }: { onClose: () => void }) {
@@ -32,7 +32,7 @@ export function PresetManager({ onClose }: { onClose: () => void }) {
       }
     >
       {snap.presets.length === 0 ? (
-        <p className="dim">还没有方案。在抽取页填好数量后，可以从“方案”菜单保存，乘数规则和标签筛选会一起保存。</p>
+        <p className="dim">还没有方案。在抽取页填好数量后，可以从“方案”菜单保存，乘数规则会一起保存。</p>
       ) : (
         <ul className="preset-list">
           {snap.presets.map(p => {
@@ -41,9 +41,7 @@ export function PresetManager({ onClose }: { onClose: () => void }) {
               return l ? [{ name: l.name, count: v.count, repeat: v.repeat }] : []
             })
             const total = parts.reduce((s, x) => s + x.count * Math.max(1, x.repeat), 0)
-            const all = Object.values(p.picks)
-            const note = ruleNote(all, snap.tags)
-            const gone = picksRule(all).tagIds.some(id => !snap.tags.some(t => t.id === id))
+            const note = ruleNote(Object.values(p.picks))
             return (
               <li key={p.id}>
                 <div className="preset-info">
@@ -52,7 +50,6 @@ export function PresetManager({ onClose }: { onClose: () => void }) {
                     {num(total)} 条 · {parts.map(partLabel).join('、') || '分类已全部删除'}
                   </span>
                   {note && <span className="preset-rule">{note}</span>}
-                  {gone && <span className="err-text">用到的标签已被删除，填入后需要重新选择标签</span>}
                 </div>
                 <button className="icon-btn" onClick={() => rename(p.id, p.name)} aria-label={`重命名方案 ${p.name}`} title="重命名">
                   <Pencil size={16} />

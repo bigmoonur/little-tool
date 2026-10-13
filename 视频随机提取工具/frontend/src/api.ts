@@ -1,7 +1,10 @@
 // 对 Wails 生成的绑定做一层类型整理。
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
-import type { Done, HistoryEntry, InitInfo, LicenseStatus, PlanSummary, Progress, Settings, State, Theme } from './types'
+import type {
+  AfterCopy, Done, HistoryEntry, ImportDone, InitInfo, LibraryMode, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme,
+  VideoFile,
+} from './types'
 
 const go = Go as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
 const call = <T,>(name: string, ...args: unknown[]) => go[name](...args) as Promise<T>
@@ -14,7 +17,13 @@ export const api = {
   setFolder: (name: string) => call<State>('SetFolder', name),
   createFolder: (name: string) => call<State>('CreateFolder', name),
 
-  prepare: (counts: Record<string, number>, clean: boolean) => call<PlanSummary>('Prepare', counts, clean),
+  createTag: (name: string) => call<{ state: State; id: string }>('CreateTag', name),
+  renameTag: (id: string, name: string) => call<State>('RenameTag', id, name),
+  setTagColor: (id: string, color: string) => call<State>('SetTagColor', id, color),
+  deleteTag: (id: string) => call<State>('DeleteTag', id),
+  setCategoryTags: (category: string, tagIds: string[]) => call<State>('SetCategoryTags', category, tagIds),
+
+  prepare: (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => call<PlanSummary>('Prepare', picks, mode, clean),
   start: (id: string) => call<void>('Start', id),
   cancel: () => call<void>('Cancel'),
   cancelAndQuit: () => call<void>('CancelAndQuit'),
@@ -22,11 +31,41 @@ export const api = {
   history: () => call<HistoryEntry[]>('History'),
   clearHistory: () => call<void>('ClearHistory'),
 
-  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; theme: Theme; rememberDraft: boolean }) =>
+  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; afterCopy: AfterCopy; theme: Theme; rememberDraft: boolean; thumbnails: boolean }) =>
     call<Settings>('UpdateSettings', s),
-  saveDraft: (d: Record<string, number>) => call<void>('SaveDraft', d),
+  setLibraryView: (mode: LibraryMode) => call<Settings>('SetLibraryView', mode),
+  saveDraft: (counts: Record<string, number>, repeats: Record<string, number>, mode: RepeatMode) => call<void>('SaveDraft', counts, repeats, mode),
+
+  savePreset: (name: string, picks: Record<string, Pick>, mode: RepeatMode) => call<{ state: State; id: string }>('SavePreset', name, picks, mode),
+  renamePreset: (id: string, name: string) => call<State>('RenamePreset', id, name),
+  deletePreset: (id: string) => call<State>('DeletePreset', id),
   openFolder: (path: string) => call<void>('OpenFolder', path),
   openDataFolder: () => call<void>('OpenDataFolder'),
+
+  videos: (category: string) => call<VideoFile[]>('Videos', category),
+  openCategory: (category: string) => call<void>('OpenCategory', category),
+  openVideo: (category: string, name: string) => call<void>('OpenVideo', category, name),
+  /** 把界面生成的缩略图交给后端缓存；data 为空表示这个视频生成不了。 */
+  saveThumbnail: (category: string, name: string, data: string) => call<void>('SaveThumbnail', category, name, data),
+  createCategory: (name: string) => call<State>('CreateCategory', name),
+  createCategoryIn: (name: string, groupId: string) => call<State>('CreateCategoryIn', name, groupId),
+  renameCategory: (oldName: string, newName: string) => call<State>('RenameCategory', oldName, newName),
+  deleteCategory: (name: string, withVideos: boolean) => call<{ state: State; removed: number; kept: boolean }>('DeleteCategory', name, withVideos),
+  moveCategory: (name: string, groupId: string, beforeName: string) => call<State>('MoveCategory', name, groupId, beforeName),
+  createGroup: (name: string) => call<{ state: State; id: string }>('CreateGroup', name),
+  renameGroup: (id: string, name: string) => call<State>('RenameGroup', id, name),
+  setGroupColor: (id: string, color: string) => call<State>('SetGroupColor', id, color),
+  setGroupCollapsed: (id: string, collapsed: boolean) => call<State>('SetGroupCollapsed', id, collapsed),
+  deleteGroup: (id: string) => call<State>('DeleteGroup', id),
+  moveGroup: (id: string, beforeId: string) => call<State>('MoveGroup', id, beforeId),
+  chooseVideos: () => call<string[]>('ChooseVideos'),
+  addVideos: (category: string, paths: string[]) => call<void>('AddVideos', category, paths),
+
+  lockStatus: () => call<LockStatus>('LockStatus'),
+  unlock: (pin: string) => call<{ ok: boolean; status: LockStatus }>('Unlock', pin),
+  setLock: (current: string, pin: string) => call<LockStatus>('SetLock', current, pin),
+  disableLock: (current: string) => call<LockStatus>('DisableLock', current),
+  resetLockWithLicense: (key: string) => call<LockStatus>('ResetLockWithLicense', key),
 
   licenseStatus: () => call<LicenseStatus>('LicenseStatus'),
   activateLicense: (key: string) => call<LicenseStatus>('ActivateLicense', key),
@@ -38,6 +77,8 @@ export const events = {
   onLicenseChanged: (fn: (s: LicenseStatus) => void) => Runtime.EventsOn('license-changed', fn),
   onProgress: (fn: (p: Progress) => void) => Runtime.EventsOn('copy-progress', fn),
   onDone: (fn: (d: Done) => void) => Runtime.EventsOn('copy-done', fn),
+  onImportProgress: (fn: (p: Progress) => void) => Runtime.EventsOn('import-progress', fn),
+  onImportDone: (fn: (d: ImportDone) => void) => Runtime.EventsOn('import-done', fn),
   onCloseWhileBusy: (fn: () => void) => Runtime.EventsOn('close-while-busy', fn),
 }
 

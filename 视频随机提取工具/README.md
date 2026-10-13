@@ -1,31 +1,49 @@
-# 视频随机提取工具 · 开发说明
+# 视频分发工具 · 开发说明
 
-与「文本随机提取工具」同一套技术和设计语言的 Windows 桌面工具，在 macOS 上开发和打包。用户使用说明见 [使用说明.md](使用说明.md)。
+与「链接抽取工具」同一套技术和设计语言的 Windows 桌面工具，在 macOS 上开发和打包。用户使用说明见 [使用说明.md](使用说明.md)。
 
 - 后端：Go + [Wails v2](https://wails.io)，打包后是单个 exe
-- 前端：React + TypeScript + Vite；弹窗、提示条、回车键图标与「文本随机提取工具」共用同一份实现，样式沿用同一套色彩和组件
+- 前端：React + TypeScript + Vite；弹窗、提示条、回车键图标与「链接抽取工具」共用同一份实现，样式沿用同一套色彩和组件
 
 ## 目录
 
 ```text
 main.go                    窗口配置、数据目录
-app.go                     暴露给界面的方法：选择文件夹、抽取、复制进度与取消、记录、设置
+app.go                     暴露给界面的方法：选择文件夹、抽取、复制进度与取消、素材库、记录、设置
 internal/picker/
-  fs.go                    扫描分类和目标文件夹、文件夹名称规则、两个根目录相互独立、账号接口预留
-  plan.go                  随机抽取，自动避开同名视频
+  fs.go                    扫描分类和目标文件夹、素材库的视频清单、文件夹名称规则、两个根目录相互独立、账号接口预留
+  plan.go                  随机抽取、乘数和三种乘数规则；自动避开同名视频。连续重复的副本在文件名后加随机字符，
+                           循环重复和分轮随机在文件名前加两位轮次序号（文件夹按名称排序就是轮次顺序）
   copy.go                  暂存复制 → 检查 → 一次性放入；失败或取消时回滚
   disk_*.go                剩余空间、隐藏临时文件夹（按平台）
-  store.go                 settings.json、history.json、window.json
+  store.go                 settings.json、history.json（含每次用的参数）、presets.json、window.json
+  layout.go                layout.json：分组、分类顺序与隐藏状态，素材盘离线时仍保留
+  categories.go            分类恢复、文件夹重命名与关联搬迁、删除视频或仅移除分类
+  tags.go                  标签（名称、颜色）和每个分类贴的标签，保存在 tags.json
+  thumbs.go                缩略图缓存：缓存名、保存、清理已经消失的视频的缩略图
+  import.go                往分类里添加视频：只复制、不覆盖，失败或取消时撤销
+library.go                 素材库的方法：缩略图、新建分类、添加视频
+app_layout.go              分组、分类整理接口；复制成功后的窗口动作
+media.go                   给界面提供缩略图和生成缩略图用的视频数据（每次最多 1 MiB，见下面“缩略图”）
   picker_test.go
 frontend/src/
   App.tsx                  外壳：顶栏、复制状态、自动刷新、关闭确认
-  views/                   首次使用、抽取页、记录页
-  dialogs/                 设置
-  ui/                      弹窗、提示条、回车键图标、标志
+  views/                   首次使用、抽取页、素材库（LibrarySidebar 分组树）、记录页
+  dialogs/                 设置、方案管理、标签管理和贴标签、DeleteCategoryDialog 删除分类确认
+  lib/reorder.ts           分组和分类拖动排序、跨分组移动
+  ui/                      弹窗、小面板、提示条、标签、回车键图标、标志
 ../shared/license/        两款工具共用的 Keygen 授权和安全回归测试
 license.go                 授权接口与后端操作检查
 build.sh / build.ps1        相同发布策略：默认无 Garble、production、移除路径和符号
 ```
+
+## 缩略图
+
+程序里没有带视频解码器，缩略图由界面生成：`frontend/src/lib/thumbs.ts` 用一个不显示的 `<video>` 读出一帧，缩小成 JPEG 交给后端，后端存进数据目录的 `thumbs/`。缓存名是素材根目录、分类、文件名、大小、修改时间的哈希，任何一项变了都是新的一张；扫描素材时把已经不存在的视频的缩略图删掉（素材根目录读不到时不删）。
+
+- 视频数据通过 Wails 的 `AssetServer.Handler` 提供（`/media/<分类>/<文件名>`）。Wails 在 Windows 上会把整个响应先读进内存，所以每次只回 1 MiB，由浏览器按 Range 继续取。
+- 不能回 304：WebView2 收到 304 会卡住，所以缩略图不带验证头，靠 `Cache-Control: immutable` 和会变的缓存名。
+- 能不能出图取决于 WebView 能解码什么：H.264 的 mp4 / mov、webm 可以；avi、wmv、flv 和系统不支持的编码不行，后端记一个 `.none` 标记，不会每次重试。
 
 ## 与旧版的对应
 
@@ -58,7 +76,7 @@ cd frontend && npx tsc --noEmit
 
 ## 授权（Keygen）
 
-与文本随机提取工具共用 [`../shared/license`](../shared/license/README.md)，Account、Product、Policy ID、公钥和机器指纹相同。同一授权码在同一电脑上共用一个设备名额；各自的缓存保存在各自的数据目录，首次使用分别输入一次授权码。
+与链接抽取工具共用 [`../shared/license`](../shared/license/README.md)，Account、Product、Policy ID、公钥和机器指纹相同。同一授权码在同一电脑上共用一个设备名额；各自的缓存保存在各自的数据目录，首次使用分别输入一次授权码。
 
 - 启动时联网验证，运行中每 24 小时复核；只有后台要求心跳时才按后台期限发送心跳。
 - 每分钟和每次核心操作都做本地检查；签名有效的缓存最多允许离线 7 天，且不超过授权到期。

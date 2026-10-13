@@ -8,15 +8,17 @@ import (
 	"os/exec"
 	goruntime "runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"videopicker/internal/picker"
 
 	"github.com/bigmoonur/little-tool/shared/license"
+	"github.com/bigmoonur/little-tool/shared/license/applock"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const AppVersion = "2.0.0"
+const AppVersion = "2.0.3"
 
 type App struct {
 	ctx     context.Context
@@ -24,6 +26,8 @@ type App struct {
 	lic     licenseManager
 	initErr error
 	rng     *rand.Rand
+	lock    *applock.Lock
+	lockMu  sync.Mutex
 
 	mu        sync.Mutex
 	pending   *picker.Plan
@@ -31,14 +35,23 @@ type App struct {
 	cancel    context.CancelFunc
 	busy      bool
 	quitAfter bool
+
+	thumbMu      sync.Mutex
+	pruneRunning atomic.Bool
+	lastPrune    atomic.Int64
 }
 
 func NewApp(store *picker.Store, lic licenseManager, initErr error) *App {
-	return &App{store: store, lic: lic, initErr: initErr, rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
+	a := &App{store: store, lic: lic, initErr: initErr, rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
+	if initErr == nil && store != nil {
+		a.lock = applock.Open(store.Dir())
+	}
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.scheduleThumbnailPrune()
 	if a.lic != nil && !licenseBypass {
 		a.lic.Start(func(st license.Status) { runtime.EventsEmit(ctx, "license-changed", st) })
 	}
@@ -104,13 +117,14 @@ type InitInfo struct {
 	Settings picker.Settings `json:"settings"`
 	Version  string          `json:"version"`
 	Platform string          `json:"platform"`
+	Lock     applock.Status  `json:"lock"`
 }
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive, Thumbnails: true, LibraryView: "list", AfterCopy: "stay"}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
-	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS}, nil
+	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS, Lock: a.LockStatus()}, nil
 }
 
 // State 是界面需要的文件夹信息，每次都重新扫描磁盘。
@@ -119,6 +133,9 @@ type State struct {
 	OutputRoot    string               `json:"outputRoot"`
 	Folder        string               `json:"folder"`
 	Categories    []picker.Category    `json:"categories"`
+	Groups        []picker.Group       `json:"groups"`
+	Tags          []picker.Tag         `json:"tags"`
+	Presets       []picker.Preset      `json:"presets"`
 	Destinations  []picker.Destination `json:"destinations"`
 	MaterialError string               `json:"materialError"`
 	OutputError   string               `json:"outputError"`
@@ -128,16 +145,17 @@ type State struct {
 
 func (a *App) State() State {
 	if a.store == nil {
-		return State{Categories: []picker.Category{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		return State{Categories: []picker.Category{}, Groups: []picker.Group{}, Tags: []picker.Tag{}, Presets: []picker.Preset{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
 	}
 	s := a.store.Settings()
 	st := State{MaterialRoot: s.MaterialRoot, OutputRoot: s.OutputRoot, Folder: s.Folder,
-		Categories: []picker.Category{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		Categories: []picker.Category{}, Groups: a.store.Groups(), Tags: a.store.Tags(), Presets: a.store.Presets(), Destinations: []picker.Destination{}, Leftovers: []string{}}
 	if s.MaterialRoot != "" {
-		if cats, err := picker.ScanCategories(s.MaterialRoot); err != nil {
+		if cats, err := a.store.ScanCategories(s.MaterialRoot); err != nil {
 			st.MaterialError = err.Error()
 		} else {
-			st.Categories = cats
+			st.Categories = a.store.ArrangeCategories(cats)
+			a.scheduleThumbnailPrune()
 		}
 	}
 	if s.OutputRoot != "" {
@@ -163,6 +181,80 @@ func (a *App) State() State {
 	st.Busy = a.busy
 	a.mu.Unlock()
 	return st
+}
+
+type PresetSaved struct {
+	State State  `json:"state"`
+	ID    string `json:"id"`
+}
+
+func (a *App) SavePreset(name string, picks map[string]picker.Pick, mode string) (PresetSaved, error) {
+	if err := a.requireLicense(); err != nil {
+		return PresetSaved{State: a.State()}, err
+	}
+	id, err := a.store.SavePreset(name, picks, mode)
+	return PresetSaved{State: a.State(), ID: id}, err
+}
+
+func (a *App) RenamePreset(id, name string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.RenamePreset(id, name)
+	return a.State(), err
+}
+
+func (a *App) DeletePreset(id string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.DeletePreset(id)
+	return a.State(), err
+}
+
+type TagCreated struct {
+	State State  `json:"state"`
+	ID    string `json:"id"`
+}
+
+func (a *App) CreateTag(name string) (TagCreated, error) {
+	if err := a.requireLicense(); err != nil {
+		return TagCreated{State: a.State()}, err
+	}
+	id, err := a.store.CreateTag(name)
+	return TagCreated{State: a.State(), ID: id}, err
+}
+
+func (a *App) RenameTag(id, name string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.RenameTag(id, name)
+	return a.State(), err
+}
+
+func (a *App) SetTagColor(id, color string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.SetTagColor(id, color)
+	return a.State(), err
+}
+
+func (a *App) DeleteTag(id string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.DeleteTag(id)
+	return a.State(), err
+}
+
+func (a *App) SetCategoryTags(category string, tagIDs []string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.SetCategoryTags(category, tagIDs)
+	return a.State(), err
 }
 
 func (a *App) chooseDir(title, current string) string {
@@ -196,6 +288,8 @@ func (a *App) ChooseMaterialRoot() (State, error) {
 	a.store.Update(func(st *picker.Settings) {
 		if st.MaterialRoot != path {
 			st.Draft = map[string]int{}
+			st.DraftRepeat = map[string]int{}
+			st.Mode = picker.ModeConsecutive
 		}
 		st.MaterialRoot = path
 	})
@@ -280,22 +374,22 @@ type PlanSummary struct {
 }
 
 // Prepare 随机抽取一批视频但不复制；需要清理旧视频时由界面确认后再调用 Start。
-func (a *App) Prepare(counts map[string]int, clean bool) (PlanSummary, error) {
+func (a *App) Prepare(picks map[string]picker.Pick, mode string, clean bool) (PlanSummary, error) {
 	if err := a.requireLicense(); err != nil {
 		return PlanSummary{}, err
 	}
-	if err := a.idle(); err != nil {
-		return PlanSummary{}, err
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.busy {
+		return PlanSummary{}, userErr("正在复制，请等待完成或取消后再操作")
 	}
 	s := a.store.Settings()
-	p, err := picker.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, counts, clean, a.rng)
+	p, err := a.store.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, picks, mode, clean, a.rng)
 	if err != nil {
 		return PlanSummary{}, err
 	}
 	id := time.Now().Format("150405.000000")
-	a.mu.Lock()
 	a.pending, a.pendingID = &p, id
-	a.mu.Unlock()
 	return PlanSummary{ID: id, Count: len(p.Items), Bytes: p.Bytes, Old: len(p.Old), Destination: p.Destination, Folder: p.Folder, Items: p.Items}, nil
 }
 
@@ -357,9 +451,7 @@ func (a *App) Start(id string) error {
 			return
 		}
 		runtime.EventsEmit(a.ctx, "copy-done", done)
-		if done.OK && a.store.Settings().OpenAfter {
-			_ = openPath(res.Destination)
-		}
+		a.afterSuccessfulCopy(done.OK, res.Destination, openPath, func() { runtime.WindowMinimise(a.ctx) }, func() { runtime.Quit(a.ctx) })
 	}()
 	return nil
 }
@@ -388,29 +480,38 @@ func (a *App) ClearHistory() error {
 type UISettings struct {
 	AlwaysOnTop   bool   `json:"alwaysOnTop"`
 	OpenAfter     bool   `json:"openAfter"`
+	AfterCopy     string `json:"afterCopy"`
 	Theme         string `json:"theme"`
 	RememberDraft bool   `json:"rememberDraft"`
+	Thumbnails    bool   `json:"thumbnails"`
 }
 
 func (a *App) UpdateSettings(u UISettings) picker.Settings {
+	a.thumbMu.Lock()
 	prev := a.store.Settings()
 	s := a.store.Update(func(st *picker.Settings) {
 		st.AlwaysOnTop, st.OpenAfter, st.RememberDraft = u.AlwaysOnTop, u.OpenAfter, u.RememberDraft
+		st.Thumbnails = u.Thumbnails
+		st.AfterCopy = u.AfterCopy
 		switch u.Theme {
 		case "system", "light", "dark":
 			st.Theme = u.Theme
 		}
 	})
-	if prev.AlwaysOnTop != s.AlwaysOnTop {
+	if prev.Thumbnails && !s.Thumbnails {
+		_ = a.store.ClearThumbs()
+	}
+	a.thumbMu.Unlock()
+	if prev.AlwaysOnTop != s.AlwaysOnTop && a.ctx != nil {
 		runtime.WindowSetAlwaysOnTop(a.ctx, s.AlwaysOnTop)
 	}
 	return s
 }
 
-func (a *App) SaveDraft(draft map[string]int) {
+func (a *App) SaveDraft(counts map[string]int, repeats map[string]int, mode string) {
 	a.store.Update(func(st *picker.Settings) {
 		if st.RememberDraft {
-			st.Draft = draft
+			st.Draft, st.DraftRepeat, st.Mode = counts, repeats, mode
 		}
 	})
 }
@@ -438,3 +539,46 @@ func (a *App) OpenFolder(path string) error {
 }
 
 func (a *App) OpenDataFolder() error { return openPath(a.store.Dir()) }
+
+// ---------- 素材库 ----------
+
+// Videos 列出一个分类里的视频，供素材库查看。
+func (a *App) Videos(category string) ([]picker.VideoFile, error) {
+	if a.store == nil {
+		return []picker.VideoFile{}, errors.New("无法打开数据文件夹")
+	}
+	s := a.store.Settings()
+	var videos []picker.VideoFile
+	var err error
+	if s.Thumbnails {
+		videos, err = picker.ListVideosWithKeys(s.MaterialRoot, category)
+		states := a.store.ThumbStates()
+		for i := range videos {
+			videos[i].Thumb = states[videos[i].Key]
+		}
+	} else {
+		videos, err = picker.ListVideos(s.MaterialRoot, category)
+	}
+	if videos == nil {
+		videos = []picker.VideoFile{}
+	}
+	return videos, err
+}
+
+// OpenCategory 在资源管理器中打开分类的文件夹。
+func (a *App) OpenCategory(category string) error {
+	dir, err := picker.CategoryDir(a.store.Settings().MaterialRoot, category)
+	if err != nil {
+		return err
+	}
+	return openPath(dir)
+}
+
+// OpenVideo 用系统默认的播放器打开素材库里的一个视频。
+func (a *App) OpenVideo(category, name string) error {
+	path, err := picker.VideoPath(a.store.Settings().MaterialRoot, category, name)
+	if err != nil {
+		return err
+	}
+	return openPath(path)
+}

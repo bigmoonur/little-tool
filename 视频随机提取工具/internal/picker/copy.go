@@ -26,12 +26,14 @@ type Progress struct {
 
 // Result 是复制完成后的结果。
 type Result struct {
-	Destination string `json:"destination"`
-	Folder      string `json:"folder"`
-	Items       []Item `json:"items"`
-	Removed     int    `json:"removed"`
-	Avoided     int    `json:"avoided"`
-	Warning     string `json:"warning"`
+	Destination string          `json:"destination"`
+	Folder      string          `json:"folder"`
+	Items       []Item          `json:"items"`
+	Removed     int             `json:"removed"`
+	Avoided     int             `json:"avoided"`
+	Warning     string          `json:"warning"`
+	Picks       map[string]Pick `json:"picks"`
+	Mode        string          `json:"mode"`
 }
 
 type entryInfo struct {
@@ -131,7 +133,10 @@ func Execute(ctx context.Context, p Plan, progress func(Progress)) (res Result, 
 	for _, it := range p.Items {
 		fi, err := os.Lstat(it.source)
 		if err != nil || !isPlainFile(fi) || !sourceUnder(p.MaterialRoot, it.source) {
-			return Result{}, userErr("素材已不存在或已移动：%s / %s", it.Category, it.Name)
+			return Result{}, userErr("素材已不存在或已移动：%s / %s", it.Category, it.originalName())
+		}
+		if fi.Size() != it.Size || !fi.ModTime().Equal(it.mod) {
+			return Result{}, userErr("素材发生了变化，请重新抽取：%s", it.originalName())
 		}
 		if !isVideo(it.Name) {
 			return Result{}, userErr("不是支持的视频文件：%s", it.Name)
@@ -233,9 +238,12 @@ func Execute(ctx context.Context, p Plan, progress func(Progress)) (res Result, 
 	// 第一阶段：复制到临时文件夹。
 	var done int64
 	for i, it := range p.Items {
-		srcBefore, err := os.Stat(it.source)
-		if err != nil {
-			return Result{}, userErr("素材已不存在：%s / %s", it.Category, it.Name)
+		srcBefore, err := os.Lstat(it.source)
+		if err != nil || !isPlainFile(srcBefore) || !sourceUnder(p.MaterialRoot, it.source) {
+			return Result{}, userErr("素材已不存在：%s / %s", it.Category, it.originalName())
+		}
+		if srcBefore.Size() != it.Size || !srcBefore.ModTime().Equal(it.mod) {
+			return Result{}, userErr("复制期间素材发生了变化，请重试：%s", it.originalName())
 		}
 		report := func(n int64) {
 			done += n
@@ -251,7 +259,7 @@ func Execute(ctx context.Context, p Plan, progress func(Progress)) (res Result, 
 		after, err := os.Stat(it.source)
 		st, serr := os.Stat(target)
 		if err != nil || serr != nil || after.Size() != srcBefore.Size() || !after.ModTime().Equal(srcBefore.ModTime()) || st.Size() != srcBefore.Size() {
-			return Result{}, userErr("复制期间素材发生了变化，请重试：%s", it.Name)
+			return Result{}, userErr("复制期间素材发生了变化，请重试：%s", it.originalName())
 		}
 	}
 	if progress != nil {
@@ -305,10 +313,19 @@ func Execute(ctx context.Context, p Plan, progress func(Progress)) (res Result, 
 	return Result{
 		Destination: dest,
 		Folder:      p.Folder,
-		Items:       p.Items,
+		Items:       append([]Item{}, p.Items...),
 		Removed:     len(old),
 		Avoided:     p.Avoided,
+		Picks:       clonePicks(p.Picks),
+		Mode:        p.Mode,
 	}, nil
+}
+
+func (it Item) originalName() string {
+	if it.Origin != "" {
+		return it.Origin
+	}
+	return it.Name
 }
 
 // HumanBytes 把字节数写成 1.2 GB 这样的形式。

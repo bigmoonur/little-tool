@@ -249,6 +249,13 @@ export function LibrarySidebar() {
                     >
                       <button className="tree-item-btn" onClick={() => select(l.id)} onDoubleClick={() => renameList(l)}>
                         <span className="tree-item-name">{l.name}</span>
+                        {l.tagIds.length > 0 && (
+                          <span className="tree-tags" title={`标签：${l.tagIds.map(id => snap.tags.find(t => t.id === id)?.name).join('、')}`}>
+                            {l.tagIds.slice(0, 4).map(id => (
+                              <i key={id} className={`tag-dot c-${snap.tags.find(t => t.id === id)?.color}`} />
+                            ))}
+                          </span>
+                        )}
                         <span className="tree-count">{num(l.count)}</span>
                       </button>
                       <button className="icon-btn sm tree-more" aria-label={`分类 ${l.name} 的更多操作`} onClick={e => listMenu(l, anchorOf(e.currentTarget, 'end'))}>
@@ -293,8 +300,8 @@ export function LibrarySidebar() {
         </button>
       </div>
       <div className="lib-tag-foot">
-        <button className="btn btn-tags" onClick={() => setTagsOpen(true)}>
-          <Tags size={18} />
+        <button className="btn btn-ghost" onClick={() => setTagsOpen(true)}>
+          <Tags size={16} />
           管理标签
           {snap.tags.length > 0 && <span className="tree-count">{snap.tags.length}</span>}
         </button>

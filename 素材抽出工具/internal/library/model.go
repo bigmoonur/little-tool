@@ -26,28 +26,31 @@ type Group struct {
 }
 
 type Tag struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 // List 是一个素材分类，对应原来的一个 TXT 文件，每个条目是一行。
 type List struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	GroupID   string     `json:"groupId"`
-	Items     []string   `json:"items"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	GroupID string   `json:"groupId"`
+	Items   []string `json:"items"`
+	// TagIDs 是贴在整个分类上的标签，按标签列表的顺序保存。
+	TagIDs []string `json:"tagIds,omitempty"`
+	// ItemTags 是早先按行保存的标签。读入时并入 TagIDs，之后不再写出。
 	ItemTags  [][]string `json:"itemTags,omitempty"`
 	UpdatedAt int64      `json:"updatedAt"`
 
 	unique int
 }
 
-// Pick 保存数量、乘数规则和文本标签筛选条件。
+// Pick 保存数量和乘数规则。
 type Pick struct {
-	Count  int      `json:"count"`
-	Repeat int      `json:"repeat"`
-	Mode   string   `json:"mode,omitempty"`
-	TagIDs []string `json:"tagIds,omitempty"`
+	Count  int    `json:"count"`
+	Repeat int    `json:"repeat"`
+	Mode   string `json:"mode,omitempty"`
 }
 
 type Preset struct {
@@ -83,7 +86,7 @@ type Data struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		AlwaysOnTop:  true,
+		AlwaysOnTop:  false,
 		AfterCopy:    "stay",
 		Theme:        "system",
 		ImportDedupe: true,
@@ -116,12 +119,14 @@ func (d *Data) normalize() {
 	if d.Tags == nil {
 		d.Tags = []Tag{}
 	}
-	tagIDs := map[string]bool{}
 	for i := range d.Tags {
 		if d.Tags[i].ID == "" {
 			d.Tags[i].ID = NewID()
 		}
-		tagIDs[d.Tags[i].ID] = true
+		// 旧数据里的标签没有颜色，按次序补上。
+		if !validColor(d.Tags[i].Color) {
+			d.Tags[i].Color = GroupColors[i%len(GroupColors)]
+		}
 	}
 	if d.Presets == nil {
 		d.Presets = []Preset{}
@@ -149,9 +154,13 @@ func (d *Data) normalize() {
 			l.GroupID = ""
 		}
 		l.setItems(cleanItems(l.Items))
-		for j, ids := range l.ItemTags {
-			l.ItemTags[j] = cleanTagIDs(ids, tagIDs)
+		// 早先按行贴的标签并到分类上：只要有一行贴过，这个分类就带这个标签。
+		ids := l.TagIDs
+		for _, line := range l.ItemTags {
+			ids = append(ids, line...)
 		}
+		l.TagIDs = d.orderTags(ids)
+		l.ItemTags = nil
 	}
 	for i := range d.Presets {
 		if d.Presets[i].Picks == nil {
@@ -175,28 +184,7 @@ func (s *Settings) normalize() {
 }
 
 func (l *List) setItems(items []string) {
-	// 按原文及出现次序保留标签，支持排序、追加和删除；相同行仍可有各自的标签。
-	old := map[string][][]string{}
-	for i, text := range l.Items {
-		var tags []string
-		if i < len(l.ItemTags) {
-			tags = l.ItemTags[i]
-		}
-		key := strings.TrimSpace(text)
-		old[key] = append(old[key], tags)
-	}
-	tags := make([][]string, len(items))
-	for i, text := range items {
-		if matches := old[text]; len(matches) > 0 {
-			tags[i] = matches[0]
-			old[text] = matches[1:]
-		}
-		if tags[i] == nil {
-			tags[i] = []string{}
-		}
-	}
 	l.Items = items
-	l.ItemTags = tags
 	l.unique = countUnique(items)
 }
 

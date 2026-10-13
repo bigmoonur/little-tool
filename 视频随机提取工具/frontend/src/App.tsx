@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { History, Pin, PinOff, Settings as SettingsIcon, Shuffle } from 'lucide-react'
+import { History, Library, Pin, PinOff, Settings as SettingsIcon, Shuffle, Lock } from 'lucide-react'
 import { api, errorText, events } from './api'
 import { AppContext, type CopyState, type Ctx } from './ctx'
 import { SettingsDialog } from './dialogs/SettingsDialog'
 import { day, num } from './lib/format'
-import type { InitInfo, LicenseStatus, Settings, State, View } from './types'
+import { draftToPicks, modeInfo, picksToDraft } from './lib/pick'
+import type { Draft, InitInfo, LicenseStatus, LockStatus, Pick, RepeatMode, Settings, State, View } from './types'
+import { LockScreen } from './views/LockScreen'
 import { ErrorBoundary } from './ui/ErrorBoundary'
 import { Logo } from './ui/Logo'
 import { useDialogs } from './ui/Modal'
 import { useToasts } from './ui/Toasts'
 import { ExtractView } from './views/ExtractView'
 import { HistoryView } from './views/HistoryView'
+import { LibraryView } from './views/LibraryView'
 import { LicenseGate } from './views/LicenseGate'
 
 const NO_LICENSE: LicenseStatus = {
@@ -37,7 +40,7 @@ export default function App() {
   if ('error' in boot) {
     return (
       <div className="fatal">
-        <h1>视频随机提取工具无法启动</h1>
+        <h1>视频分发工具无法启动</h1>
         <p>{boot.error}</p>
         <p className="dim">请确认当前 Windows 账户可以写入“应用数据”文件夹，然后重新打开程序。</p>
       </div>
@@ -56,6 +59,7 @@ export default function App() {
 
 const NAV: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'extract', label: '抽取', icon: <Shuffle size={16} /> },
+  { view: 'library', label: '素材库', icon: <Library size={16} /> },
   { view: 'history', label: '记录', icon: <History size={16} /> },
 ]
 
@@ -65,13 +69,26 @@ function Shell({ init, initialState, license, setLicense }: {
   const [state, setState] = useState(initialState)
   const [settings, setSettings] = useState<Settings>(init.settings)
   const [view, setView] = useState<View>('extract')
+  const [selected, select] = useState('')
   const [copy, setCopy] = useState<CopyState>({ phase: 'idle' })
+  const [adding, setAdding] = useState<Ctx['adding']>(null)
+  const [draft, setDraft] = useState<Draft>(() => {
+    const picks: Record<string, Pick> = {}
+    for (const [name, count] of Object.entries(init.settings.draft ?? {})) picks[name] = { count, repeat: init.settings.draftRepeat?.[name] ?? 1 }
+    return picksToDraft(picks)
+  })
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(modeInfo(init.settings.mode).mode)
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [lock, setLock] = useState<LockStatus>(init.lock ?? { enabled: false, failures: 0, lockedUntil: 0 })
+  // 开了锁屏密码时，一打开就是锁着的；initial 直接盖住，manual（手动锁定）有落下来的动画。
+  const [locked, setLocked] = useState<'initial' | 'manual' | null>(init.lock?.enabled ? 'initial' : null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { toast, node: toastNode } = useToasts()
   const dialogs = useDialogs()
   const copyRef = useRef(copy)
   copyRef.current = copy
+  const addingRef = useRef(adding)
+  addingRef.current = adding
 
   const run = useCallback(
     async <T,>(p: Promise<T>): Promise<T | undefined> => {
@@ -93,10 +110,25 @@ function Shell({ init, initialState, license, setLicense }: {
     }
   }, [])
 
-  const startCopy = async (counts: Record<string, number>, clean: boolean) => {
+  // 记住数量（设置中开启时）
+  useEffect(() => {
+    if (!settings.rememberDraft) return
+    const t = window.setTimeout(() => {
+      const counts: Record<string, number> = {}
+      const repeats: Record<string, number> = {}
+      for (const [name, p] of Object.entries(draftToPicks(draft, state.categories))) {
+        counts[name] = p.count
+        if (p.repeat > 1) repeats[name] = p.repeat
+      }
+      api.saveDraft(counts, repeats, repeatMode)
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [draft, repeatMode, state.categories, settings.rememberDraft])
+
+  const startCopy = async (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => {
     if (license.state !== 'active') return
-    if (copyRef.current.phase === 'copying') return
-    const plan = await run(api.prepare(counts, clean))
+    if (copyRef.current.phase === 'copying' || addingRef.current) return
+    const plan = await run(api.prepare(picks, mode, clean))
     if (!plan) return refresh()
     if (plan.old > 0) {
       const ok = await dialogs.confirm({
@@ -122,6 +154,41 @@ function Shell({ init, initialState, license, setLicense }: {
     }
   }
 
+  // 在素材库里添加视频：先选文件，再复制进分类。复制期间和抽取互斥。
+  const addVideos = async (category: string) => {
+    if (license.state !== 'active') return
+    if (copyRef.current.phase === 'copying' || addingRef.current) return
+    const paths = await run(api.chooseVideos())
+    if (!paths?.length) return
+    setAdding({ category })
+    try {
+      await api.addVideos(category, paths)
+    } catch (e) {
+      toast(errorText(e), { kind: 'error' })
+      setAdding(null)
+    }
+  }
+
+  useEffect(() => {
+    const offProgress = events.onImportProgress(p => setAdding(a => (a ? { ...a, progress: p } : a)))
+    const offDone = events.onImportDone(d => {
+      setAdding(null)
+      refresh()
+      if (d.cancelled) return void toast(d.error)
+      if (!d.ok) return void toast(d.error, { kind: 'error', duration: 10000 })
+      const { added, skipped, category } = d.result
+      // 跳过的文件写出前几个和原因，免得用户以为都加进去了。
+      const why = skipped.slice(0, 3).map(x => `${x.name}（${x.reason}）`).join('、') + (skipped.length > 3 ? ` 等 ${num(skipped.length)} 个` : '')
+      if (!added.length) return void toast(`没有添加视频：${why}`, { kind: 'error', duration: 10000 })
+      if (skipped.length) return void toast(`已添加 ${num(added.length)} 个视频到「${category}」，跳过 ${num(skipped.length)} 个：${why}`, { duration: 10000 })
+      toast(`已添加 ${num(added.length)} 个视频到「${category}」`, { kind: 'ok' })
+    })
+    return () => {
+      offProgress()
+      offDone()
+    }
+  }, [])
+
   // 复制进度与结果
   useEffect(() => {
     const offProgress = events.onProgress(p => {
@@ -140,12 +207,11 @@ function Shell({ init, initialState, license, setLicense }: {
       }
     })
     const offClose = events.onCloseWhileBusy(async () => {
-      const ok = await dialogs.confirm({
-        title: '正在复制，取消并退出？',
-        message: '会停止复制，把目标文件夹恢复原样后再退出。',
-        confirmText: '取消复制并退出',
-        danger: true,
-      })
+      const ok = await dialogs.confirm(
+        addingRef.current
+          ? { title: '正在添加视频，取消并退出？', message: '会停止添加，这次已经放进分类的视频也会撤掉，原文件不受影响。', confirmText: '取消添加并退出', danger: true }
+          : { title: '正在复制，取消并退出？', message: '会停止复制，把目标文件夹恢复原样后再退出。', confirmText: '取消复制并退出', danger: true },
+      )
       if (ok) api.cancelAndQuit()
     })
     return () => {
@@ -158,7 +224,7 @@ function Shell({ init, initialState, license, setLicense }: {
   // 回到窗口时自动刷新：在资源管理器里增减视频后不用手动刷新。
   useEffect(() => {
     const onFocus = () => {
-      if (copyRef.current.phase !== 'copying') refresh()
+      if (copyRef.current.phase !== 'copying' && !addingRef.current) refresh()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -184,11 +250,11 @@ function Shell({ init, initialState, license, setLicense }: {
     offlineNotice.current = until
   }, [license.offline, license.graceUntil, toast])
 
-  // 快捷键 Ctrl+1 / Ctrl+2 切换页面
+  // 快捷键 Ctrl+1 / Ctrl+2 / Ctrl+3 切换页面
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('.modal-layer, .license-overlay')) return
-      if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2')) {
+      if (document.querySelector('.modal-layer, .license-overlay, .lock-overlay')) return
+      if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2' || e.key === '3')) {
         e.preventDefault()
         setView(NAV[Number(e.key) - 1].view)
       }
@@ -213,27 +279,37 @@ function Shell({ init, initialState, license, setLicense }: {
     version: init.version,
     view,
     go: setView,
+    selected,
+    select,
     toast,
     confirm: dialogs.confirm,
     prompt: dialogs.prompt,
     run,
     historyVersion,
     copy,
+    draft,
+    setDraft,
+    repeatMode,
+    setRepeatMode,
     startCopy,
     cancelCopy: () => api.cancel(),
+    adding,
+    addVideos,
     clearResult: () => setCopy({ phase: 'idle' }),
     license,
     setLicense,
+    lock,
+    setLock,
   }
 
   return (
     <AppContext.Provider value={ctx}>
       <div className="licensed-content" inert={license.state !== 'active'}>
-      <div className="app">
+      <div className="app" inert={!!locked}>
         <header className="topbar">
           <div className="brand">
             <Logo />
-            <span>视频随机提取工具</span>
+            <span>视频分发工具</span>
           </div>
           <nav className="nav" role="tablist" aria-label="页面">
             {NAV.map((n, i) => (
@@ -251,9 +327,19 @@ function Shell({ init, initialState, license, setLicense }: {
             ))}
           </nav>
           <div className="topbar-right">
+            {adding && view !== 'library' && (
+              <button className="btn btn-ghost copying-chip" onClick={() => setView('library')}>
+                正在添加视频 {adding.progress ? `${Math.floor((adding.progress.bytesDone / Math.max(1, adding.progress.bytesTotal)) * 100)}%` : ''}
+              </button>
+            )}
             {copy.phase === 'copying' && view !== 'extract' && (
               <button className="btn btn-ghost copying-chip" onClick={() => setView('extract')}>
                 正在复制 {copy.progress ? `${Math.floor((copy.progress.bytesDone / Math.max(1, copy.progress.bytesTotal)) * 100)}%` : ''}
+              </button>
+            )}
+            {lock.enabled && (
+              <button className="icon-btn" onClick={() => setLocked('manual')} aria-label="立即锁定" title="立即锁定：再次使用要输入密码">
+                <Lock size={17} />
               </button>
             )}
             <button
@@ -274,6 +360,7 @@ function Shell({ init, initialState, license, setLicense }: {
           {/* 按页面分别兜底：一个页面出错时仍可切换到其他页面。 */}
           <ErrorBoundary key={view}>
             {view === 'extract' && <ExtractView />}
+            {view === 'library' && <LibraryView />}
             {view === 'history' && <HistoryView />}
           </ErrorBoundary>
         </main>
@@ -282,6 +369,17 @@ function Shell({ init, initialState, license, setLicense }: {
       {dialogs.node}
       {toastNode}
       <div id="overlay-root" />
+      {locked && (
+        <LockScreen
+          status={lock}
+          dropIn={locked === 'manual'}
+          onStatus={setLock}
+          onUnlocked={reset => {
+            setLocked(null)
+            if (reset) toast('锁屏密码已关闭，可以在设置里重新设置', { kind: 'ok' })
+          }}
+        />
+      )}
       </div>
       {license.state !== 'active' && (
         <div className="license-overlay" role="dialog" aria-modal="true" aria-label="重新验证授权">

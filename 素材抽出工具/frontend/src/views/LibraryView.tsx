@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { CopyMinus, Download, FileText, Pencil, Plus, Tags, Trash2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { CopyMinus, Download, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { loadFiles, pickFiles } from '../lib/files'
@@ -9,7 +9,9 @@ import { EmptyLibrary } from './EmptyLibrary'
 import { ListEditor } from './ListEditor'
 import { LibrarySidebar, useDeleteList } from './LibrarySidebar'
 import { buildSections } from '../lib/reorder'
-import { TextTagDialog } from '../dialogs/TextTagDialog'
+import { useTagMap } from '../lib/tags'
+import { useListTagging } from '../dialogs/ListTagging'
+import { TagPill } from '../ui/TagPill'
 
 export function LibraryView() {
   const { snap, selectedId, select } = useApp()
@@ -36,15 +38,11 @@ export function LibraryView() {
 }
 
 function ListDetail({ list }: { list: ListInfo }) {
-  const { snap, setSnap, run, prompt, toast, commit, openImport, leave } = useApp()
+  const { snap, setSnap, run, prompt, toast, commit, openImport } = useApp()
   const { deleteList } = useDeleteList()
   const dupes = list.count - list.unique
-  const [tagsOpen, setTagsOpen] = useState(false)
-
-  // 标签按行号贴在文本上：编辑器里有未保存的修改时先保存或放弃，再打开，避免标签贴错文本。
-  const openTags = async () => {
-    if (await leave()) setTagsOpen(true)
-  }
+  const tags = useTagMap()
+  const tagging = useListTagging()
 
   const rename = async () => {
     const name = await prompt({ title: '重命名分类', label: '分类名称', initial: list.name, confirmText: '重命名' })
@@ -105,6 +103,21 @@ function ListDetail({ list }: { list: ListInfo }) {
           {dupes > 0 && <span className="warn-text">其中 {num(dupes)} 条重复</span>}
           {list.updatedAt > 0 && <span className="dim">{when(list.updatedAt)} 更新</span>}
         </div>
+        <div className="detail-tags">
+          <span className="dim">标签</span>
+          {list.tagIds.map(id => (
+            <TagPill key={id} tag={tags.get(id)} />
+          ))}
+          <button
+            className={`tag-add ${tagging.openId === list.id ? 'is-open' : ''}`}
+            aria-haspopup="dialog"
+            title="标签贴在整个分类上，抽取时点标签就能只看带这个标签的分类"
+            onClick={e => tagging.open(list, e.currentTarget)}
+          >
+            <Plus size={14} />
+            <span>{list.tagIds.length ? '修改' : '贴标签'}</span>
+          </button>
+        </div>
         <div className="detail-actions">
           <button className="btn btn-primary" onClick={() => openImport({ tab: 'paste', targetId: list.id })}>
             <Plus size={16} />
@@ -113,15 +126,6 @@ function ListDetail({ list }: { list: ListInfo }) {
           <button className="btn" onClick={importFiles}>
             <FileText size={16} />
             从 TXT 导入
-          </button>
-          <button
-            className="btn btn-tags"
-            onClick={openTags}
-            disabled={list.count === 0}
-            title={list.count === 0 ? '先添加素材并保存，再给文本设置标签' : '给这个分类里的每条文本设置标签'}
-          >
-            <Tags size={18} />
-            文本标签
           </button>
           <button className="btn" onClick={exportList} disabled={list.count === 0}>
             <Download size={16} />
@@ -141,7 +145,7 @@ function ListDetail({ list }: { list: ListInfo }) {
         </div>
       </header>
       <ListEditor list={list} />
-      {tagsOpen && <TextTagDialog list={list} onClose={() => setTagsOpen(false)} />}
+      {tagging.node}
     </div>
   )
 }

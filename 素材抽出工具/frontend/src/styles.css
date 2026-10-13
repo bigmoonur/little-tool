@@ -325,7 +325,8 @@ kbd {
   cursor: pointer;
   flex: none;
 }
-.icon-btn:hover {
+.icon-btn:hover,
+.icon-btn.is-open {
   background: var(--surface-3);
   color: var(--ink);
 }
@@ -634,130 +635,148 @@ kbd {
   gap: 4px;
   margin: 0 -8px 10px;
 }
-.toolbar-hint {
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 乘数规则：三段切换。样式与顶栏的页面切换一致。 */
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
-.toolbar-hint .enter-key {
-  margin: -2px 4px 0 0;
-}
-
-/* 乘数规则与标签筛选：整次抽取共用的两项设置，放在数量表格上方。 */
-.rules {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
-}
-.rules-head {
-  font-weight: 700;
-}
-.rules-head .dim {
-  margin-left: 10px;
-  font-weight: 400;
-}
-.mode-bar {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.mode-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 64px;
-  padding: 6px 8px;
-  border: 2px solid var(--line-strong);
-  border-radius: var(--r-m);
-  background: var(--surface);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.mode-btn:hover {
-  border-color: var(--ink-3);
-  background: var(--surface-2);
-}
-.mode-name {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-.mode-eg {
-  font-family: var(--font-mono);
-  font-size: 15px;
+.mode-switch-label {
   color: var(--ink-2);
   white-space: nowrap;
 }
-.mode-btn.is-on {
-  border-color: var(--primary);
-  background: var(--select);
-  color: var(--select-ink);
+.mode-switch .icon-btn {
+  margin-left: -4px;
 }
-.mode-btn.is-on .mode-eg {
-  color: inherit;
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-3);
+  border-radius: 11px;
+  flex: none;
 }
-.mode-help {
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--ink-2);
-  line-height: 1.6;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.mode-help b {
+.seg-btn:hover {
   color: var(--ink);
 }
+.seg-btn.is-on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(22, 28, 46, 0.12);
+}
+:root[data-theme="dark"] .seg-btn.is-on {
+  background: var(--line-strong);
+}
+.seg-short {
+  display: none;
+}
 
-.filter-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line-strong);
+/* 规则的小图样和示范：同一个字母同一种颜色，代表同一条内容。 */
+.t-A { --tc: var(--c-indigo); }
+.t-B { --tc: var(--c-teal); }
+.t-C { --tc: var(--c-rose); }
+.t-D { --tc: var(--c-violet); }
+.mode-glyph {
+  display: inline-flex;
+  gap: 2px;
 }
-.btn.btn-filter {
-  height: 48px;
-  padding: 0 20px;
-  border-width: 2px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+.mode-glyph i {
+  width: 5px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--tc);
 }
-.filter-row.is-on .btn-filter {
-  background: var(--gold);
-  color: var(--on-gold);
+.seg-btn:not(.is-on) .mode-glyph {
+  opacity: 0.6;
 }
-.filter-state {
-  flex: 1;
-  min-width: 180px;
+
+/* 标签栏：数量表格最上面的一条，点标签就是筛选。 */
+.tag-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 8px;
-  color: var(--ink-2);
+  padding: 8px 16px 8px 14px;
+  border-bottom: 1px solid var(--line);
 }
-.filter-row:not(.is-on) .filter-state {
+.tag-bar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 2px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tag-bar-note {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.chip:hover {
+  border-color: var(--ink-3);
   color: var(--ink);
+}
+.chip.is-on {
+  background: var(--select);
+  border-color: var(--focus);
+  color: var(--select-ink);
   font-weight: 600;
 }
-.filter-state .dim {
+.chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip-n {
+  color: var(--ink-3);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.chip.is-on .chip-n {
+  color: inherit;
+  opacity: 0.7;
 }
 
 .notice {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  margin-bottom: 10px;
   padding: 10px 12px;
+  border: 1px solid var(--line);
   border-radius: var(--r-m);
-  background: var(--gold-soft);
-  color: var(--gold-ink);
+  background: var(--surface);
+  color: var(--ink-2);
   line-height: 1.55;
 }
 .notice p {
@@ -772,6 +791,7 @@ kbd {
   flex: none;
 }
 .notice.is-danger {
+  border-color: transparent;
   background: var(--danger-soft);
   color: var(--danger);
   font-weight: 600;
@@ -995,8 +1015,7 @@ kbd {
   background: var(--danger);
   opacity: 1;
 }
-.pick-row.is-empty .pick-title,
-.pick-row.is-none .pick-title {
+.pick-row.is-empty .pick-title {
   color: var(--ink-3);
 }
 
@@ -1005,7 +1024,25 @@ kbd {
   flex-direction: column;
   min-width: 0;
 }
+/* 分类名称后面紧跟它的标签，标签多了自动换行。 */
+.pick-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.pick-title-row .pick-title {
+  margin-right: 4px;
+}
+.tag-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .pick-title {
+  min-width: 0;
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
@@ -1015,12 +1052,6 @@ kbd {
 .pick-meta {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
-}
-.pick-meta b {
-  color: var(--ink);
-}
-.pick-none {
-  color: var(--warn);
 }
 .pick-error {
   color: var(--danger);
@@ -1132,10 +1163,35 @@ kbd {
     radial-gradient(circle at 5px 0, transparent 3.5px, var(--gold) 4px) 0 0 / 10px 7px repeat-x;
   border-radius: 4px 4px 0 0;
 }
+.slip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  margin: -6px -8px 0 0;
+}
 .slip-label {
   color: var(--gold-ink);
   font-weight: 600;
   letter-spacing: 0.08em;
+}
+.slip-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.slip-clear:hover {
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  color: var(--ink);
 }
 .slip-total {
   display: flex;
@@ -1168,22 +1224,27 @@ kbd {
   }
 }
 
-/* 本次抽取采用的乘数规则和标签筛选。 */
-.slip-rule {
+/* 本次抽取用到的标签筛选和乘数规则；没有筛选、没用乘数时不显示。 */
+.slip-rule,
+.result-rule {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+.slip-rule {
   margin-bottom: 12px;
 }
-.slip-rule span {
-  max-width: 100%;
-  padding: 2px 10px;
+.slip-mode {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
   border-radius: 99px;
-  background: color-mix(in srgb, var(--gold) 24%, transparent);
-  color: var(--gold-ink);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -1326,11 +1387,6 @@ kbd {
 .result-parts {
   color: var(--ink-2);
 }
-.result-rule {
-  display: block;
-  color: var(--gold-ink);
-  font-weight: 600;
-}
 .result-lines {
   margin: 0;
   padding: 6px 0;
@@ -1372,10 +1428,6 @@ kbd {
   justify-content: center;
   height: 44px;
   padding: 0 12px;
-}
-.result-note {
-  color: var(--ink-3);
-  line-height: 1.5;
 }
 .result-history {
   align-self: flex-start;
@@ -1635,6 +1687,12 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tree-tags {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+  flex: none;
+}
 .tree-empty {
   display: flex;
   flex-direction: column;
@@ -1700,8 +1758,6 @@ kbd {
 .lib-tag-foot .tree-count {
   margin-left: 0;
   padding-left: 2px;
-  color: inherit;
-  opacity: 0.7;
 }
 
 .swatches {
@@ -1770,6 +1826,16 @@ kbd {
 }
 .detail-meta b {
   color: var(--ink);
+}
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}
+.detail-tags > .dim {
+  margin-right: 2px;
 }
 .detail-actions {
   display: flex;
@@ -2615,47 +2681,213 @@ kbd {
   white-space: nowrap;
 }
 .preset-rule {
-  color: var(--gold-ink);
-  font-weight: 600;
+  color: var(--ink-2);
 }
 
 /* ---------- 标签 ---------- */
 
-/* 与标签有关的入口统一用藤黄色，和靛青的主按钮区分开。 */
-.btn-tags,
-.btn-filter {
-  background: var(--gold-soft);
-  border-color: var(--gold-deep);
-  color: var(--gold-ink);
-  font-weight: 600;
+/* 标签：自己颜色的圆点（分组是方点）加名称。藤黄只留给“本次抽取”，标签不再用它。 */
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gc);
+  flex: none;
 }
-.btn-tags:hover:not(:disabled),
-.btn-filter:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--gold) 32%, var(--surface));
-  border-color: var(--gold-deep);
-}
-.filter-row.is-on .btn-filter:hover:not(:disabled) {
-  background: var(--gold-deep);
-}
-
-.tag-badge {
-  display: inline-block;
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  padding: 1px 10px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--gc) 38%, var(--line));
   border-radius: 99px;
-  border: 1px solid color-mix(in srgb, var(--gold-deep) 55%, transparent);
-  background: var(--gold-soft);
-  color: var(--gold-ink);
-  font-weight: 600;
+  background: color-mix(in srgb, var(--gc) 10%, var(--surface));
+  color: var(--ink);
+  font-weight: 500;
   white-space: nowrap;
+  vertical-align: middle;
+  flex: none;
+}
+.tag-pill-name {
+  min-width: 0;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
-  vertical-align: middle;
 }
-.tag-badge.is-gone {
+.tag-pill.is-gone {
   border-color: var(--danger);
   background: var(--danger-soft);
   color: var(--danger);
+}
+/* 可以点的标签（抽取页分类行上）：点一下就按它筛选。 */
+.tag-pill.is-button {
+  cursor: pointer;
+  font-size: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.tag-pill.is-button:hover {
+  border-color: var(--gc);
+}
+.tag-pill.is-hit {
+  border-color: var(--focus);
+  background: var(--select);
+  color: var(--select-ink);
+  font-weight: 600;
+}
+/* 贴标签的入口：虚线小圆钮，跟在标签后面。 */
+.tag-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--ink-3);
+  white-space: nowrap;
+  cursor: pointer;
+  flex: none;
+}
+.tag-add:has(svg + *) {
+  padding: 0 10px 0 7px;
+}
+.tag-add:hover,
+.tag-add.is-open {
+  border-style: solid;
+  border-color: var(--ink-3);
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+/* 小面板：贴标签、规则说明。 */
+.popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  padding: 10px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  box-shadow: var(--shadow-pop);
+}
+.pop-title {
+  padding: 2px 4px 0;
+  font-weight: 700;
+}
+.pop-empty {
+  padding: 4px;
+  color: var(--ink-2);
+}
+.pop-link {
+  align-self: flex-start;
+  min-height: 28px;
+  padding: 0 4px;
+}
+.tag-pop-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 264px;
+  overflow-y: auto;
+}
+.tag-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  flex: none;
+}
+.tag-pop-item:hover:not(:disabled),
+.tag-pop-item:focus-visible {
+  background: var(--surface-3);
+  outline: none;
+}
+.tag-pop-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.tag-pop-item.is-on {
+  font-weight: 600;
+}
+
+.mode-help-lead,
+.mode-help-foot {
+  padding: 0 4px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+.mode-demos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mode-demo {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.mode-demo:hover {
+  border-color: var(--ink-3);
+}
+.mode-demo.is-on {
+  border-color: var(--focus);
+  background: var(--select);
+}
+.mode-demo-name {
+  font-weight: 700;
+}
+.mode-demo-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.tile-group {
+  display: inline-flex;
+  gap: 3px;
+}
+.tile {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-s);
+  background: var(--tc);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-weight: 700;
+}
+:root[data-theme="dark"] .tile {
+  color: var(--bg);
+}
+.mode-demo-help {
+  grid-column: 2;
+  color: var(--ink-2);
+  line-height: 1.5;
 }
 
 .tag-help {
@@ -2690,6 +2922,18 @@ kbd {
 .tag-new .field-error {
   margin: 0;
 }
+.tag-new.is-compact {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.tag-new.is-compact .tag-new-row .input,
+.tag-new.is-compact .tag-new-row .btn {
+  height: 40px;
+  font-size: inherit;
+}
+.tag-new.is-compact .tag-new-row .btn {
+  padding: 0 12px;
+}
 
 .tag-catalog {
   list-style: none;
@@ -2708,9 +2952,13 @@ kbd {
 .tag-catalog li + li {
   border-top: 1px solid var(--line);
 }
-.tag-catalog-icon {
-  color: var(--gold-deep);
+.tag-color {
+  width: 24px;
+  height: 24px;
   flex: none;
+}
+.tag-color:disabled {
+  cursor: default;
 }
 .tag-catalog-main {
   flex: 1;
@@ -2725,7 +2973,7 @@ kbd {
   white-space: nowrap;
 }
 
-/* 选择标签：每个标签是一块大按钮，选中后变成藤黄色并打勾。 */
+/* 选择标签：每个标签是一块按钮，选中后和其他选中项一样用靛青色并打勾。 */
 .tag-choices {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -2735,12 +2983,11 @@ kbd {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
-  padding: 6px 12px;
-  border: 2px solid var(--line-strong);
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-m);
   background: var(--surface);
-  font-size: 16px;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
@@ -2753,26 +3000,28 @@ kbd {
   grid-column: 1 / -1;
 }
 .tag-choice.is-on {
-  border-color: var(--gold-deep);
-  background: var(--gold-soft);
-  color: var(--gold-ink);
+  border-color: var(--focus);
+  background: var(--select);
+  color: var(--select-ink);
   font-weight: 600;
 }
 .tag-check {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--line-strong);
-  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
   background: var(--surface);
   flex: none;
 }
-.tag-choice.is-on .tag-check {
-  border-color: var(--gold-deep);
-  background: var(--gold);
-  color: var(--on-gold);
+.tag-choice.is-on .tag-check,
+.tag-pop-item.is-on .tag-check {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
 }
+
 .tag-choice-name {
   flex: 1;
   min-width: 0;
@@ -2791,195 +3040,278 @@ kbd {
   margin-right: auto;
   color: var(--ink-2);
 }
-.tag-target {
-  display: block;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  background: var(--surface-2);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tag-manage-link {
   align-self: flex-start;
   min-height: 32px;
 }
 
-/* 文本标签：工具栏和批量操作固定在上方，文本列表单独滚动。 */
-.modal.text-tags {
-  height: min(780px, calc(100vh - 48px));
-}
-.text-tags .modal-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-.tt-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.tt-search {
-  flex: 1;
-  min-width: 200px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 6px 0 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-m);
-  background: var(--surface);
-  cursor: text;
-}
-.tt-search:focus-within {
-  outline: 2px solid var(--focus);
-  outline-offset: -1px;
-  border-color: transparent;
-}
-.tt-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font-size: 16px;
-}
-.tt-tools .select {
-  height: 44px;
-  max-width: 240px;
-}
-.tt-tools .btn {
-  height: 44px;
-}
-.tt-bulk {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  min-height: 56px;
-  padding: 6px 8px 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  background: var(--surface-2);
-}
-.tt-bulk.is-on {
-  border-color: color-mix(in srgb, var(--gold-deep) 55%, transparent);
-  background: var(--gold-soft);
-}
-.tt-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tt-check input,
-.tt-pick input {
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  accent-color: var(--primary);
-  flex: none;
-}
-.tt-count {
-  color: var(--ink-2);
-}
-.tt-bulk.is-on .tt-count {
-  color: var(--gold-ink);
-  font-weight: 600;
-}
-.tt-rows {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-}
-.tt-rows.is-locked {
-  opacity: 0.6;
-}
-.tt-row {
+/* ---------- 锁屏 ---------- */
+
+/*
+ * 一层微透明的纸盖住整个窗口：暖白的纸色透出一点后面柔化了的界面，上面叠一层细颗粒和一层横向的纸纤维。
+ * 底边是和签条一样的撕口，解锁时整张纸向上揭开。
+ */
+.lock-overlay {
+  --paper: #f6f0e3;
+  --paper-ink: #2a2620;
+  --paper-line: rgba(74, 58, 28, 0.2);
+  --paper-cell: rgba(255, 255, 255, 0.5);
+  position: fixed;
+  inset: 0 0 -8px;
+  z-index: 150;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 220px) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 6px 10px 6px 12px;
+  place-items: center;
+  padding: 24px 24px 32px;
+  color: var(--paper-ink);
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 35%, rgba(74, 58, 28, 0.09) 100%),
+    color-mix(in srgb, var(--paper) 84%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.05);
+  backdrop-filter: blur(16px) saturate(1.05);
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat,
+    radial-gradient(circle at 6px 0, #000 5.5px, transparent 6px) bottom left / 12px 7px repeat-x;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat,
+    radial-gradient(circle at 6px 0, #000 5.5px, transparent 6px) bottom left / 12px 7px repeat-x;
 }
-.tt-row + .tt-row {
-  border-top: 1px solid var(--line);
+:root[data-theme="dark"] .lock-overlay {
+  --paper: #23201a;
+  --paper-ink: #efe7d6;
+  --paper-line: rgba(239, 231, 214, 0.2);
+  --paper-cell: rgba(255, 255, 255, 0.045);
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 35%, rgba(0, 0, 0, 0.28) 100%),
+    color-mix(in srgb, var(--paper) 86%, transparent);
 }
-.tt-row.is-selected {
-  background: color-mix(in srgb, var(--select) 60%, var(--surface));
+/* 纸的颗粒。 */
+.lock-overlay::before,
+.lock-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
-.tt-pick {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 44px;
-  cursor: pointer;
+.lock-overlay::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .24 0 0 0 0 .14 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.32;
+  mix-blend-mode: multiply;
 }
-.tt-no {
-  min-width: 36px;
-  color: var(--ink-3);
-  text-align: right;
-  flex: none;
+/* 横向的纸纤维，很淡。 */
+.lock-overlay::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.006 .45' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .26 0 0 0 0 .16 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  opacity: 0.16;
+  mix-blend-mode: multiply;
 }
-.tt-text {
-  min-width: 0;
-  font-family: var(--font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+:root[data-theme="dark"] .lock-overlay::before {
+  opacity: 0.4;
+  mix-blend-mode: soft-light;
+  filter: invert(1);
 }
-.tt-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  min-width: 0;
+:root[data-theme="dark"] .lock-overlay::after {
+  opacity: 0.14;
+  mix-blend-mode: soft-light;
+  filter: invert(1);
 }
-.tt-none {
+/* 手动锁定：纸从上面落下来。刚打开软件时没有这个动画，直接盖着。 */
+.lock-overlay.is-dropping {
+  animation: lock-drop 0.46s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 解锁：整张纸向上揭开，露出下面的界面。 */
+.lock-overlay.is-leaving {
+  animation: lock-lift 0.52s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+}
+@keyframes lock-drop {
+  from {
+    transform: translateY(-102%);
+  }
+}
+@keyframes lock-lift {
+  to {
+    transform: translateY(-102%);
+  }
+}
+
+.lock-card {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 32px 16px;
-  color: var(--ink-2);
+  gap: 18px;
+  width: min(360px, 100%);
+  margin-bottom: 4vh;
+}
+.lock-logo {
+  width: 38px;
+  height: 38px;
+}
+.lock-title {
+  margin: -6px 0 10px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+}
+.lock-message {
+  min-height: 24px;
+  color: color-mix(in srgb, var(--paper-ink) 62%, transparent);
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.tt-state {
-  flex: 1;
-  min-height: 160px;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-m);
+.lock-message.is-error {
+  color: var(--danger);
 }
-.tt-syncing {
+.lock-forgot {
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--paper-ink) 55%, transparent);
+}
+.lock-forgot:hover {
+  color: var(--paper-ink);
+}
+.lock-reset {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--warn);
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
 }
-.tt-summary {
-  margin-right: auto;
-  color: var(--ink-2);
-}
-.tt-page {
-  min-width: 64px;
+.lock-key {
+  height: 46px;
+  font-family: var(--font-mono);
   text-align: center;
+  background: var(--paper-cell);
+  border-color: var(--paper-line);
+}
+.lock-reset-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 四格密码。真正的输入框铺在上面但看不见，点任何一格都会聚焦。 */
+.passcode {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  cursor: text;
+}
+.passcode-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: text;
+}
+.passcode-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 64px;
+  border: 1px solid var(--paper-line, var(--line-strong));
+  border-radius: 13px;
+  background: var(--paper-cell, var(--surface));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 2px rgba(74, 58, 28, 0.07);
+  transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
+}
+:root[data-theme="dark"] .passcode-cell {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+/* 正在等输入的那一格：边线加深，底下一小段藤黄的光标在呼吸。 */
+.passcode:focus-within .passcode-cell.is-current {
+  border-color: color-mix(in srgb, var(--paper-ink, var(--ink)) 55%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 14px -6px rgba(74, 58, 28, 0.35);
+  transform: translateY(-1px);
+}
+.passcode:focus-within .passcode-cell.is-current::after {
+  content: "";
+  position: absolute;
+  bottom: 13px;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gold-deep);
+  animation: passcode-caret 1.1s ease-in-out infinite;
+}
+@keyframes passcode-caret {
+  50% {
+    opacity: 0.15;
+  }
+}
+/* 墨点：输入一位就弹进来一颗。 */
+.passcode-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--paper-ink, var(--ink));
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 0.12s ease-in, opacity 0.12s ease-in, background 0.2s;
+}
+.passcode-cell.is-filled .passcode-dot {
+  opacity: 1;
+  transform: scale(1);
+  transition: transform 0.24s cubic-bezier(0.34, 1.7, 0.64, 1), opacity 0.1s, background 0.2s;
+}
+/* 输错：整行轻晃，墨点变红。 */
+.passcode.is-error {
+  animation: passcode-shake 0.44s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+.passcode.is-error .passcode-cell {
+  border-color: var(--danger);
+}
+.passcode.is-error .passcode-dot {
+  background: var(--danger);
+}
+@keyframes passcode-shake {
+  12% { transform: translateX(-9px); }
+  28% { transform: translateX(8px); }
+  44% { transform: translateX(-6px); }
+  60% { transform: translateX(4px); }
+  78% { transform: translateX(-2px); }
+}
+/* 输对：四颗墨点依次变成藤黄，轻轻跳一下。 */
+.passcode.is-ok .passcode-cell {
+  border-color: var(--gold-deep);
+}
+.passcode.is-ok .passcode-dot {
+  background: var(--gold-deep);
+  animation: passcode-ok 0.34s cubic-bezier(0.34, 1.7, 0.64, 1) both;
+  animation-delay: calc(var(--i) * 45ms);
+}
+@keyframes passcode-ok {
+  40% {
+    transform: scale(1.5);
+  }
+}
+.passcode.is-disabled {
+  cursor: default;
+}
+.passcode.is-disabled:not(.is-ok) .passcode-cell {
+  opacity: 0.55;
+}
+
+/* 设置里的密码弹窗：同一组四格，放在普通的弹窗里。 */
+.lock-dialog .modal-body {
+  align-items: center;
+  gap: 16px;
+  padding-top: 14px;
+  padding-bottom: 26px;
+}
+.lock-step {
+  font-size: 16px;
+  font-weight: 600;
+}
+.lock-note {
+  min-height: 22px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.lock-note.is-error {
+  color: var(--danger);
 }
 
 /* ---------- 拖入文件 ---------- */
@@ -3034,6 +3366,22 @@ kbd {
   .pick-col-out {
     display: none;
   }
+  .mode-switch-label,
+  .seg-full,
+  .tag-bar-label span {
+    display: none;
+  }
+  .tag-bar {
+    padding-left: 12px;
+    padding-right: 10px;
+  }
+  .chip {
+    padding: 0 12px;
+  }
+  .seg-short {
+    display: inline;
+  }
+
   .library {
     grid-template-columns: 264px minmax(0, 1fr);
   }
@@ -3054,4 +3402,13 @@ kbd {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* 滚动条平时不显示，鼠标移到可以滚动的区域上才出现。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--line-strong) transparent;
 }

@@ -62,8 +62,21 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			a := licensedFixture(t, lic)
+			tagID, err := a.store.CreateTag("已有标签")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.store.SetCategoryTags("开场", []string{tagID}); err != nil {
+				t.Fatal(err)
+			}
+			presetID, err := a.store.SavePreset("已有方案", map[string]picker.Pick{"开场": {Count: 1, Repeat: 2}}, picker.ModeRandom)
+			if err != nil {
+				t.Fatal(err)
+			}
 			beforeSettings, beforeHistory := a.store.Settings(), a.store.History()
-			plan, err := picker.Prepare(beforeSettings.MaterialRoot, beforeSettings.OutputRoot, beforeSettings.Folder, map[string]int{"开场": 1}, false, a.rng)
+			beforeTags, beforeCategoryTags := a.store.Tags(), a.store.CategoryTags("开场")
+			beforePresets := a.store.Presets()
+			plan, err := picker.Prepare(beforeSettings.MaterialRoot, beforeSettings.OutputRoot, beforeSettings.Folder, map[string]picker.Pick{"开场": {Count: 1}}, "", false, a.rng)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -73,9 +86,35 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 				"choose output":        func() error { _, err := a.ChooseOutputRoot(); return err },
 				"select folder":        func() error { _, err := a.SetFolder("另一批"); return err },
 				"create folder":        func() error { _, err := a.CreateFolder("另一批"); return err },
-				"prepare":              func() error { _, err := a.Prepare(map[string]int{"开场": 1}, true); return err },
+				"prepare":              func() error { _, err := a.Prepare(map[string]picker.Pick{"开场": {Count: 1}}, "", true); return err },
 				"start prepared batch": func() error { return a.Start("prepared") },
 				"clear history":        a.ClearHistory,
+				"create tag":           func() error { _, err := a.CreateTag("新标签"); return err },
+				"rename tag":           func() error { _, err := a.RenameTag(tagID, "新名称"); return err },
+				"set tag color":        func() error { _, err := a.SetTagColor(tagID, "rose"); return err },
+				"delete tag":           func() error { _, err := a.DeleteTag(tagID); return err },
+				"set category tags":    func() error { _, err := a.SetCategoryTags("开场", nil); return err },
+				"save preset": func() error {
+					saved, err := a.SavePreset("已有方案", map[string]picker.Pick{"开场": {Count: 2}}, "")
+					if saved.ID != "" || !reflect.DeepEqual(saved.State, a.State()) {
+						t.Fatal("rejected preset save did not return current state")
+					}
+					return err
+				},
+				"rename preset": func() error {
+					st, err := a.RenamePreset(presetID, "新方案")
+					if !reflect.DeepEqual(st, a.State()) {
+						t.Fatal("rejected preset rename did not return current state")
+					}
+					return err
+				},
+				"delete preset": func() error {
+					st, err := a.DeletePreset(presetID)
+					if !reflect.DeepEqual(st, a.State()) {
+						t.Fatal("rejected preset delete did not return current state")
+					}
+					return err
+				},
 			}
 			for name, call := range calls {
 				t.Run(name, func(t *testing.T) {
@@ -85,6 +124,12 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 					}
 					if !reflect.DeepEqual(beforeSettings, a.store.Settings()) || !reflect.DeepEqual(beforeHistory, a.store.History()) {
 						t.Fatal("unlicensed call changed settings or history")
+					}
+					if !reflect.DeepEqual(beforeTags, a.store.Tags()) || !reflect.DeepEqual(beforeCategoryTags, a.store.CategoryTags("开场")) {
+						t.Fatal("unlicensed call changed tags or category assignments")
+					}
+					if !reflect.DeepEqual(beforePresets, a.store.Presets()) {
+						t.Fatal("unlicensed call changed presets")
 					}
 					if a.pending != &plan || a.busy {
 						t.Fatal("unlicensed call consumed or started the prepared batch")
@@ -116,7 +161,7 @@ func TestLicenseExpiryBetweenPrepareAndStart(t *testing.T) {
 	}
 	lic := &testLicense{status: license.Status{State: license.StateActive}}
 	a := licensedFixture(t, lic)
-	p, err := a.Prepare(map[string]int{"开场": 1}, false)
+	p, err := a.Prepare(map[string]picker.Pick{"开场": {Count: 1}}, "", false)
 	if err != nil || p.Count != 1 {
 		t.Fatalf("active license could not prepare a batch: %+v %v", p, err)
 	}

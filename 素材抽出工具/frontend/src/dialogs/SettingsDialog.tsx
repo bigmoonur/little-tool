@@ -1,9 +1,11 @@
+import { useRef, useState } from 'react'
 import { Download, FolderOpen, KeyRound, Upload } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import type { AfterCopy, Settings, Theme } from '../types'
 import { day } from '../lib/format'
 import { Modal } from '../ui/Modal'
+import { LockDialog } from './LockDialog'
 
 function Segmented<T extends string>({ value, options, onChange, label }: {
   value: T
@@ -23,8 +25,20 @@ function Segmented<T extends string>({ value, options, onChange, label }: {
 }
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { snap, setSnap, run, toast, confirm, commit, info, setDraft, license, setLicense, leave } = useApp()
+  const { snap, setSnap, run, toast, confirm, commit, info, setDraft, license, setLicense, leave, lock, setLock } = useApp()
   const s = snap.settings
+  const [lockDialog, setLockDialog] = useState<'set' | 'change' | 'disable' | null>(null)
+  // 密码小窗关闭后把焦点还给打开它的开关或按钮：点复选框不一定会让它得到焦点，
+  // 焦点留在窗口外的话，按 Esc 就关不掉设置了。
+  const lockTrigger = useRef<HTMLElement | null>(null)
+  const openLockDialog = (mode: 'set' | 'change' | 'disable', from: HTMLElement) => {
+    lockTrigger.current = from
+    setLockDialog(mode)
+  }
+  const closeLockDialog = () => {
+    setLockDialog(null)
+    requestAnimationFrame(() => lockTrigger.current?.focus())
+  }
 
   const update = async (patch: Partial<Settings>) => {
     setSnap({ ...snap, settings: { ...s, ...patch } })
@@ -110,6 +124,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3>锁屏</h3>
+          <label className="check-row">
+            <input type="checkbox" checked={lock.enabled} onChange={e => openLockDialog(e.target.checked ? 'set' : 'disable', e.target)} />
+            打开软件时需要输入 4 位密码
+          </label>
+          {lock.enabled && (
+            <div className="setting-row">
+              <span className="dim">开启后顶栏会多一个锁，可以随时锁定</span>
+              <button className="btn" onClick={e => openLockDialog('change', e.currentTarget)}>
+                修改密码
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section>
           <h3>抽取与添加</h3>
           <label className="check-row">
             <input type="checkbox" checked={s.rememberDraft} onChange={e => update({ rememberDraft: e.target.checked })} />
@@ -166,6 +196,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <p className="settings-version dim">链接抽取工具 {info.version}</p>
       </div>
+      {lockDialog && (
+        <LockDialog
+          mode={lockDialog}
+          onClose={closeLockDialog}
+          onDone={st => {
+            const done = lockDialog
+            setLock(st)
+            closeLockDialog()
+            toast(done === 'disable' ? '已关闭锁屏密码' : done === 'change' ? '已修改锁屏密码' : '已开启锁屏密码，下次打开软件时生效', { kind: 'ok' })
+          }}
+        />
+      )}
     </Modal>
   )
 }

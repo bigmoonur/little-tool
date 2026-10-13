@@ -2,7 +2,7 @@
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
 import type {
-  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, ListInfo, ListItems, Pick, PickRequest, Settings, Snapshot,
+  Extracted, HistoryEntry, ImportPlan, ImportReport, InitInfo, LicenseStatus, LockStatus, Pick, PickRequest, Settings, Snapshot,
 } from './types'
 
 type Created = { snapshot: Snapshot; id: string }
@@ -31,10 +31,9 @@ export const api = {
 
   createTag: (name: string) => call<Created>('CreateTag', name),
   renameTag: (id: string, name: string) => call<Snapshot>('RenameTag', id, name),
+  setTagColor: (id: string, color: string) => call<Snapshot>('SetTagColor', id, color),
   deleteTag: (id: string) => call<Snapshot>('DeleteTag', id),
-  listItems: (id: string) => call<ListItems>('ListItems', id),
-  setItemTags: (id: string, indexes: number[], tagIds: string[], updatedAt: number, action: 'set' | 'add' | 'remove') => call<Snapshot>('SetItemTags', id, indexes, tagIds, updatedAt, action),
-  availableLists: (tagIds: string[]) => call<ListInfo[]>('AvailableLists', tagIds),
+  setListTags: (id: string, tagIds: string[]) => call<Snapshot>('SetListTags', id, tagIds),
 
   previewImport: (plan: ImportPlan) => call<ImportReport>('PreviewImport', plan),
   applyImport: (plan: ImportPlan) => call<{ snapshot: Snapshot; report: ImportReport }>('ApplyImport', plan),
@@ -63,6 +62,12 @@ export const api = {
   activateLicense: (key: string) => call<LicenseStatus>('ActivateLicense', key),
   refreshLicense: () => call<LicenseStatus>('RefreshLicense'),
   deactivateLicense: () => call<LicenseStatus>('DeactivateLicense'),
+
+  lockStatus: () => call<LockStatus>('LockStatus'),
+  unlock: (pin: string) => call<{ ok: boolean; status: LockStatus }>('Unlock', pin),
+  setLock: (current: string, pin: string) => call<LockStatus>('SetLock', current, pin),
+  disableLock: (current: string) => call<LockStatus>('DisableLock', current),
+  resetLockWithLicense: (key: string) => call<LockStatus>('ResetLockWithLicense', key),
 
   setUnsaved: (v: boolean) => call<void>('SetUnsaved', v),
   holdClose: () => call<void>('HoldClose'),

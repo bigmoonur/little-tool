@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "链接抽取工具"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.2.0"
+    !define INFO_PRODUCTVERSION "2.2.1"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026"

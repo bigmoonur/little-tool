@@ -10,10 +10,6 @@ export function ApplyImport(arg1) {
   return window['go']['main']['App']['ApplyImport'](arg1);
 }
 
-export function AvailableLists(arg1) {
-  return window['go']['main']['App']['AvailableLists'](arg1);
-}
-
 export function ClearHistory() {
   return window['go']['main']['App']['ClearHistory']();
 }
@@ -62,6 +58,10 @@ export function DeleteTag(arg1) {
   return window['go']['main']['App']['DeleteTag'](arg1);
 }
 
+export function DisableLock(arg1) {
+  return window['go']['main']['App']['DisableLock'](arg1);
+}
+
 export function ExportBackup() {
   return window['go']['main']['App']['ExportBackup']();
 }
@@ -94,12 +94,12 @@ export function LicenseStatus() {
   return window['go']['main']['App']['LicenseStatus']();
 }
 
-export function ListItems(arg1) {
-  return window['go']['main']['App']['ListItems'](arg1);
-}
-
 export function ListText(arg1) {
   return window['go']['main']['App']['ListText'](arg1);
+}
+
+export function LockStatus() {
+  return window['go']['main']['App']['LockStatus']();
 }
 
 export function MoveGroup(arg1, arg2) {
@@ -138,6 +138,10 @@ export function RenameTag(arg1, arg2) {
   return window['go']['main']['App']['RenameTag'](arg1, arg2);
 }
 
+export function ResetLockWithLicense(arg1) {
+  return window['go']['main']['App']['ResetLockWithLicense'](arg1);
+}
+
 export function RestoreBackup() {
   return window['go']['main']['App']['RestoreBackup']();
 }
@@ -162,12 +166,20 @@ export function SetGroupColor(arg1, arg2) {
   return window['go']['main']['App']['SetGroupColor'](arg1, arg2);
 }
 
-export function SetItemTags(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['SetItemTags'](arg1, arg2, arg3, arg4, arg5);
+export function SetListTags(arg1, arg2) {
+  return window['go']['main']['App']['SetListTags'](arg1, arg2);
 }
 
 export function SetListText(arg1, arg2) {
   return window['go']['main']['App']['SetListText'](arg1, arg2);
+}
+
+export function SetLock(arg1, arg2) {
+  return window['go']['main']['App']['SetLock'](arg1, arg2);
+}
+
+export function SetTagColor(arg1, arg2) {
+  return window['go']['main']['App']['SetTagColor'](arg1, arg2);
 }
 
 export function SetUnsaved(arg1) {
@@ -180,6 +192,10 @@ export function Snapshot() {
 
 export function Undo() {
   return window['go']['main']['App']['Undo']();
+}
+
+export function Unlock(arg1) {
+  return window['go']['main']['App']['Unlock'](arg1);
 }
 
 export function UpdateSettings(arg1) {
