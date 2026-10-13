@@ -16,18 +16,17 @@ export interface ListInfo {
   count: number
   unique: number
   updatedAt: number
+  /** 贴在这个分类上的标签。 */
+  tagIds: string[]
 }
 
-export interface Tag { id: string; name: string }
-export interface TextItem { index: number; text: string; tagIds: string[] }
-export interface ListItems { items: TextItem[]; updatedAt: number }
+export interface Tag { id: string; name: string; color: GroupColor }
 export type RepeatMode = 'consecutive' | 'cycle' | 'random'
 
 export interface Pick {
   count: number
   repeat: number
   mode?: RepeatMode
-  tagIds?: string[]
 }
 
 export interface Preset {
@@ -70,7 +69,6 @@ export interface PickRequest {
   count: number
   repeat: number
   mode?: RepeatMode
-  tagIds?: string[]
 }
 
 export interface PickPart {
@@ -79,7 +77,6 @@ export interface PickPart {
   count: number
   repeat: number
   mode?: RepeatMode
-  tagIds?: string[]
 }
 
 export interface ExtractResult {

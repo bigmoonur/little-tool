@@ -6,7 +6,6 @@ export namespace library {
 	    count: number;
 	    repeat: number;
 	    mode?: string;
-	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PickPart(source);
@@ -19,7 +18,6 @@ export namespace library {
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
 	        this.mode = source["mode"];
-	        this.tagIds = source["tagIds"];
 	    }
 	}
 	export class ExtractResult {
@@ -246,6 +244,7 @@ export namespace library {
 	    count: number;
 	    unique: number;
 	    updatedAt: number;
+	    tagIds: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ListInfo(source);
@@ -259,61 +258,13 @@ export namespace library {
 	        this.count = source["count"];
 	        this.unique = source["unique"];
 	        this.updatedAt = source["updatedAt"];
-	    }
-	}
-	export class TextItem {
-	    index: number;
-	    text: string;
-	    tagIds: string[];
-
-	    static createFrom(source: any = {}) {
-	        return new TextItem(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.index = source["index"];
-	        this.text = source["text"];
 	        this.tagIds = source["tagIds"];
 	    }
-	}
-	export class ListItems {
-	    items: TextItem[];
-	    updatedAt: number;
-
-	    static createFrom(source: any = {}) {
-	        return new ListItems(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.items = this.convertValues(source["items"], TextItem);
-	        this.updatedAt = source["updatedAt"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class Pick {
 	    count: number;
 	    repeat: number;
 	    mode?: string;
-	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Pick(source);
@@ -324,7 +275,6 @@ export namespace library {
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
 	        this.mode = source["mode"];
-	        this.tagIds = source["tagIds"];
 	    }
 	}
 	
@@ -333,7 +283,6 @@ export namespace library {
 	    count: number;
 	    repeat: number;
 	    mode?: string;
-	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PickRequest(source);
@@ -345,7 +294,6 @@ export namespace library {
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
 	        this.mode = source["mode"];
-	        this.tagIds = source["tagIds"];
 	    }
 	}
 	export class Preset {
@@ -405,6 +353,7 @@ export namespace library {
 	export class Tag {
 	    id: string;
 	    name: string;
+	    color: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Tag(source);
@@ -414,6 +363,7 @@ export namespace library {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
+	        this.color = source["color"];
 	    }
 	}
 	export class Snapshot {
@@ -458,7 +408,6 @@ export namespace library {
 		    return a;
 		}
 	}
-
 
 }
 

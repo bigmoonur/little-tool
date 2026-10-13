@@ -1,4 +1,4 @@
-import type { Draft, DraftEntry, ListInfo, Pick, RepeatMode, Tag } from '../types'
+import type { Draft, DraftEntry, ListInfo, Pick, RepeatMode } from '../types'
 import { num } from './format'
 
 export interface RowState {
@@ -8,37 +8,57 @@ export interface RowState {
   error: string
 }
 
-/** 三种乘数规则。示例都按“数量 2、乘数 4”，数字代表抽到的第几条内容。 */
-export const REPEAT_MODES: { mode: RepeatMode; label: string; short: string; example: string; help: string }[] = [
-  { mode: 'consecutive', label: '连续重复', short: '连续', example: '1111 2222', help: '抽 2 条不同内容，每条连着出现 4 次。' },
-  { mode: 'cycle', label: '循环重复', short: '循环', example: '12 12 12 12', help: '抽 2 条不同内容，整批按顺序出现 4 遍。' },
+/**
+ * 三种乘数规则。示范都按“数量 2、乘数 3”：字母代表抽到的不同内容，
+ * 每一组是连在一起输出的一段（连续重复按内容分组，另外两种按遍、按轮分组）。
+ */
+export const REPEAT_MODES: { mode: RepeatMode; label: string; short: string; glyph: string; demo: string[][]; help: string }[] = [
+  {
+    mode: 'consecutive',
+    label: '连续重复',
+    short: '连续',
+    glyph: 'AABB',
+    demo: [['A', 'A', 'A'], ['B', 'B', 'B']],
+    help: '抽 2 条不同内容，每条连着出现 3 次，再轮到下一条。',
+  },
+  {
+    mode: 'cycle',
+    label: '循环重复',
+    short: '循环',
+    glyph: 'ABAB',
+    demo: [['A', 'B'], ['A', 'B'], ['A', 'B']],
+    help: '抽 2 条不同内容排成一批，整批按顺序出现 3 遍。',
+  },
   {
     mode: 'random',
     label: '分轮随机',
     short: '随机',
-    example: '12 31 24 13',
-    help: '独立抽 4 轮，每轮 2 条。同一分类每轮内容不重复，不同轮之间可能重复，也可能抽到新内容。',
+    glyph: 'ABCA',
+    demo: [['A', 'B'], ['C', 'A'], ['B', 'D']],
+    help: '一共抽 3 轮，每轮重新抽 2 条。同一轮里不重复，不同轮之间可能重复，也可能抽到新内容。',
   },
 ]
+
+/** 用这一行自己的数量和乘数说明会怎样输出，只在乘数大于 1 时需要。 */
+export function ruleLine(mode: RepeatMode, count: number, repeat: number) {
+  if (mode === 'cycle') return `抽 ${num(count)} 条排成一批，整批出现 ${num(repeat)} 遍`
+  if (mode === 'random') return `抽 ${num(repeat)} 轮，每轮重新抽 ${num(count)} 条`
+  return `抽 ${num(count)} 条，每条连着出现 ${num(repeat)} 次`
+}
 
 /** 旧方案、旧备份没有保存规则，按连续重复处理。 */
 export const modeInfo = (mode?: string) => REPEAT_MODES.find(m => m.mode === mode) ?? REPEAT_MODES[0]
 
-type Ruled = { repeat: number; mode?: RepeatMode; tagIds?: string[] }
+type Ruled = { repeat: number; mode?: RepeatMode }
 
-/** 方案、记住的数量和抽取记录里，一次抽取共用同一种规则和同一组标签，取第一项即可。 */
-export function picksRule(picks: Ruled[]): { mode: RepeatMode; tagIds: string[] } {
-  return { mode: modeInfo(picks[0]?.mode).mode, tagIds: [...(picks[0]?.tagIds ?? [])] }
-}
+/** 方案、记住的数量和抽取记录里，一次抽取共用同一种规则，取第一项即可。 */
+export const picksMode = (picks: Ruled[]): RepeatMode => modeInfo(picks[0]?.mode).mode
 
-/** “循环重复 · 标签：新品、常用”。乘数都是 1 且没有筛选时返回空字符串。 */
-export function ruleNote(picks: Ruled[], tags: Tag[]) {
-  const { mode, tagIds } = picksRule(picks)
-  const bits: string[] = []
-  if (mode === 'random' || picks.some(p => p.repeat > 1)) bits.push(modeInfo(mode).label)
-  if (tagIds.length) bits.push(`标签：${tagIds.map(id => tags.find(t => t.id === id)?.name ?? '已删除的标签').join('、')}`)
-  return bits.join(' · ')
-}
+/** 乘数规则只在用到乘数（或分轮随机）时才影响结果。 */
+export const usesRule = (picks: Ruled[]) => picksMode(picks) === 'random' || picks.some(p => p.repeat > 1)
+
+/** 用到乘数规则时返回规则名称，例如“循环重复”；否则返回空字符串。 */
+export const ruleNote = (picks: Ruled[]) => (usesRule(picks) ? modeInfo(picksMode(picks)).label : '')
 
 const COMBINED = /^(\d+)\s*[*xX×]\s*(\d+)$/
 
@@ -49,11 +69,8 @@ export function splitCombined(entry: DraftEntry): DraftEntry {
   return { count: String(Number(m[1])), repeat: String(Number(m[2])) }
 }
 
-/**
- * 检查一行填写的数量。list 的 count / unique 是当前可抽的条数：
- * 按标签筛选时（filtered）传入筛选后的统计，提示也会说明是标签限制。
- */
-export function evaluate(list: ListInfo, entry: DraftEntry | undefined, mode: RepeatMode = 'consecutive', filtered = false): RowState {
+/** 检查一行填写的数量。 */
+export function evaluate(list: ListInfo, entry: DraftEntry | undefined, mode: RepeatMode = 'consecutive'): RowState {
   const empty = { count: 0, repeat: 1, lines: 0, error: '' }
   if (!entry) return empty
   const e = splitCombined(entry)
@@ -70,19 +87,16 @@ export function evaluate(list: ListInfo, entry: DraftEntry | undefined, mode: Re
   const limit = distinct ? list.unique : list.count
   if (count > limit) {
     const unit = distinct ? '条不同内容' : '条'
-    const error = filtered
-      ? limit === 0 ? '没有符合所选标签的文本' : `符合所选标签的只有 ${num(limit)} ${unit}`
-      : `${mode === 'random' ? '每轮最多' : '最多'} ${num(limit)} ${unit}`
-    return { count, repeat, lines: 0, error }
+    return { count, repeat, lines: 0, error: `${mode === 'random' ? '每轮最多' : '最多'} ${num(limit)} ${unit}` }
   }
   return { count, repeat, lines: count * repeat, error: '' }
 }
 
-export function draftToPicks(draft: Draft, lists: ListInfo[], mode: RepeatMode = 'consecutive', tagIds: string[] = []): Record<string, Pick> {
+export function draftToPicks(draft: Draft, lists: ListInfo[], mode: RepeatMode = 'consecutive'): Record<string, Pick> {
   const out: Record<string, Pick> = {}
   for (const l of lists) {
     const r = evaluate(l, draft[l.id], mode)
-    if (!r.error && (r.count > 0 || r.repeat > 1)) out[l.id] = { count: r.count, repeat: r.repeat, mode, tagIds }
+    if (!r.error && (r.count > 0 || r.repeat > 1)) out[l.id] = { count: r.count, repeat: r.repeat, mode }
   }
   return out
 }
@@ -99,7 +113,7 @@ export function samePicks(a: Record<string, Pick>, b: Record<string, Pick>) {
   const norm = (p: Record<string, Pick>) =>
     Object.entries(p)
       .filter(([, v]) => v.count > 0)
-      .map(([k, v]) => `${k}:${v.count}:${Math.max(1, v.repeat)}:${v.mode || 'consecutive'}:${[...(v.tagIds ?? [])].sort().join(',')}`)
+      .map(([k, v]) => `${k}:${v.count}:${Math.max(1, v.repeat)}:${v.mode || 'consecutive'}`)
       .sort()
       .join('|')
   return norm(a) === norm(b)

@@ -8,8 +8,6 @@ export function ActivateLicense(arg1:string):Promise<license.Status>;
 
 export function ApplyImport(arg1:library.ImportPlan):Promise<main.Imported>;
 
-export function AvailableLists(arg1:Array<string>):Promise<Array<library.ListInfo>>;
-
 export function ClearHistory():Promise<void>;
 
 export function ConfirmClose():Promise<void>;
@@ -50,8 +48,6 @@ export function Init():Promise<main.InitInfo>;
 
 export function LicenseStatus():Promise<license.Status>;
 
-export function ListItems(arg1:string):Promise<library.ListItems>;
-
 export function ListText(arg1:string):Promise<string>;
 
 export function MoveGroup(arg1:string,arg2:number):Promise<library.Snapshot>;
@@ -84,9 +80,11 @@ export function SetGroupCollapsed(arg1:string,arg2:boolean):Promise<library.Snap
 
 export function SetGroupColor(arg1:string,arg2:string):Promise<library.Snapshot>;
 
-export function SetItemTags(arg1:string,arg2:Array<number>,arg3:Array<string>,arg4:number,arg5:string):Promise<library.Snapshot>;
+export function SetListTags(arg1:string,arg2:Array<string>):Promise<library.Snapshot>;
 
 export function SetListText(arg1:string,arg2:string):Promise<library.Snapshot>;
+
+export function SetTagColor(arg1:string,arg2:string):Promise<library.Snapshot>;
 
 export function SetUnsaved(arg1:boolean):Promise<void>;
 

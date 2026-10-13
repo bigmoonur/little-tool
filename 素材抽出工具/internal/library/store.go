@@ -35,6 +35,8 @@ type ListInfo struct {
 	Count     int    `json:"count"`
 	Unique    int    `json:"unique"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// TagIDs 是贴在这个分类上的标签。
+	TagIDs []string `json:"tagIds"`
 }
 
 // Snapshot 是发给界面的素材库概要，不含条目正文。
@@ -261,10 +263,6 @@ func clonePresets(ps []Preset) []Preset {
 
 func clonePicks(ps map[string]Pick) map[string]Pick {
 	out := maps.Clone(ps)
-	for id, p := range out {
-		p.TagIDs = slices.Clone(p.TagIDs)
-		out[id] = p
-	}
 	return out
 }
 
@@ -336,7 +334,7 @@ func (s *Store) snapshot() Snapshot {
 		Settings: d.Settings,
 	}
 	for i, l := range d.Lists {
-		snap.Lists[i] = ListInfo{l.ID, l.Name, l.GroupID, len(l.Items), l.unique, l.UpdatedAt}
+		snap.Lists[i] = ListInfo{l.ID, l.Name, l.GroupID, len(l.Items), l.unique, l.UpdatedAt, append([]string{}, l.TagIDs...)}
 	}
 	if s.undo != nil {
 		snap.Undo = s.undo.label
@@ -660,11 +658,6 @@ func (s *Store) ApplyImport(plan ImportPlan) (Snapshot, ImportReport, error) {
 func (s *Store) Extract(reqs []PickRequest) (ExtractResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, req := range reqs {
-		if err := s.data.checkTags(req.TagIDs); err != nil {
-			return ExtractResult{}, err
-		}
-	}
 	return Extract(s.data.Lists, reqs, s.rng)
 }
 
@@ -748,13 +741,10 @@ func (s *Store) SavePreset(name string, picks map[string]Pick) (Snapshot, string
 		clean := map[string]Pick{}
 		for listID, p := range picks {
 			if p.Count > 0 && d.listIndex(listID) >= 0 {
-				if err := d.checkTags(p.TagIDs); err != nil {
-					return err
-				}
 				if !validRepeatMode(p.Mode) {
 					return userErr("不支持的乘数规则")
 				}
-				clean[listID] = Pick{Count: p.Count, Repeat: max(1, p.Repeat), Mode: p.Mode, TagIDs: slices.Clone(p.TagIDs)}
+				clean[listID] = Pick{Count: p.Count, Repeat: max(1, p.Repeat), Mode: p.Mode}
 			}
 		}
 		if len(clean) == 0 {
@@ -842,7 +832,6 @@ func (s *Store) SaveDraft(draft map[string]Pick) {
 	clean := map[string]Pick{}
 	for id, p := range draft {
 		if (p.Count > 0 || p.Repeat > 1) && s.data.listIndex(id) >= 0 {
-			p.TagIDs = slices.Clone(p.TagIDs)
 			clean[id] = p
 		}
 	}

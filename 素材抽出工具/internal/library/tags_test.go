@@ -2,9 +2,7 @@ package library
 
 import (
 	"encoding/json"
-	"reflect"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -32,182 +30,178 @@ func tagStore(t *testing.T) (*Store, string, string, string) {
 	return s, id, a, b
 }
 
-func setTags(t *testing.T, s *Store, id string, indexes []int, tags []string, action string) {
+func listTags(t *testing.T, s *Store, id string) []string {
 	t.Helper()
-	items, err := s.ListItems(id)
-	if err != nil {
+	for _, l := range s.Snapshot().Lists {
+		if l.ID == id {
+			return l.TagIDs
+		}
+	}
+	t.Fatalf("list %s missing", id)
+	return nil
+}
+
+func TestListTagsBelongToTheWholeList(t *testing.T) {
+	s, id, a, b := tagStore(t)
+	if got := listTags(t, s, id); got == nil || len(got) != 0 {
+		t.Fatalf("untagged list must report an empty, non-nil tag list: %#v", got)
+	}
+	updated := s.Snapshot().Lists[0].UpdatedAt
+	// 重复的标签只算一次，顺序跟标签列表走。
+	if _, err := s.SetListTags(id, []string{b, a, b}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetItemTags(id, indexes, tags, items.UpdatedAt, action); err != nil {
-		t.Fatal(err)
+	if got := listTags(t, s, id); !slices.Equal(got, []string{a, b}) {
+		t.Fatalf("tags not deduplicated in tag order: %v", got)
+	}
+	if s.Snapshot().Lists[0].UpdatedAt != updated {
+		t.Fatal("tagging a list must not count as editing its content")
+	}
+
+	before, _ := s.ExportData()
+	if _, err := s.SetListTags(id, []string{a, "missing"}); err == nil {
+		t.Fatal("deleted tag accepted")
+	}
+	if _, err := s.SetListTags("missing", []string{a}); err == nil {
+		t.Fatal("tags set on a missing list")
+	}
+	if after, _ := s.ExportData(); string(before) != string(after) {
+		t.Fatal("rejected change still modified stored tags")
+	}
+
+	// 标签不影响抽取：贴了标签的分类照样从全部内容里抽。
+	res, err := s.Extract([]PickRequest{{ListID: id, Count: 4, Repeat: 1}})
+	if err != nil || res.Total != 4 {
+		t.Fatalf("tags must not narrow extraction: %+v %v", res, err)
+	}
+
+	got := listTags(t, s, id)
+	got[0] = "changed"
+	if listTags(t, s, id)[0] != a {
+		t.Fatal("snapshot tags alias stored state")
+	}
+	if _, err := s.SetListTags(id, nil); err != nil || len(listTags(t, s, id)) != 0 {
+		t.Fatal("tags could not be cleared")
 	}
 }
 
-func TestTextTagsFilteringUsesEachLineAndUnion(t *testing.T) {
+func TestListTagsSurviveEditingImportDeleteAndUndo(t *testing.T) {
 	s, id, a, b := tagStore(t)
-	setTags(t, s, id, []int{0, 1}, []string{a}, "set")
-	setTags(t, s, id, []int{1, 3}, []string{b}, "add")
-	items, _ := s.ListItems(id)
-	if len(items.Items[2].TagIDs) != 0 || !slices.Equal(items.Items[1].TagIDs, []string{a, b}) {
-		t.Fatalf("identical lines must keep independent tags: %+v", items)
-	}
-	for _, test := range []struct {
-		tags          []string
-		count, unique int
-	}{
-		{nil, 4, 3}, {[]string{a}, 2, 2}, {[]string{b}, 2, 2}, {[]string{a, b}, 3, 3},
-	} {
-		lists, err := s.AvailableLists(test.tags)
-		if err != nil || lists[0].Count != test.count || lists[0].Unique != test.unique {
-			t.Fatalf("availability for %v = %+v, %v", test.tags, lists, err)
-		}
-	}
-	res, err := s.Extract([]PickRequest{{ListID: id, Count: 2, Repeat: 3, Mode: RepeatCycle, TagIDs: []string{b}}})
-	if err != nil {
+	if _, err := s.SetListTags(id, []string{a, b}); err != nil {
 		t.Fatal(err)
 	}
-	for _, line := range strings.Split(res.Text, "\n") {
-		if line != "b" && line != "c" {
-			t.Fatalf("extracted untagged text %q", line)
-		}
-	}
-	if !slices.Equal(res.Parts[0].TagIDs, []string{b}) || res.Parts[0].Mode != RepeatCycle {
-		t.Fatalf("missing repeat/filter metadata: %+v", res.Parts)
-	}
-	if _, err := s.Extract([]PickRequest{{ListID: id, Count: 3, Repeat: 1, TagIDs: []string{b}}}); err == nil {
-		t.Fatal("must enforce filtered capacity in the backend")
-	}
-}
-
-func TestTagsSurviveEditingImportAndUndo(t *testing.T) {
-	s, id, a, b := tagStore(t)
-	setTags(t, s, id, []int{0}, []string{a}, "set")
-	setTags(t, s, id, []int{2}, []string{b}, "set")
-	before, _ := s.ListItems(id)
-	if _, err := s.SetListText(id, "c\na\nnew\na"); err != nil {
+	if _, err := s.SetListText(id, "c\nnew"); err != nil {
 		t.Fatal(err)
-	}
-	got, _ := s.ListItems(id)
-	if !slices.Equal(got.Items[1].TagIDs, []string{a}) || !slices.Equal(got.Items[3].TagIDs, []string{b}) || len(got.Items[2].TagIDs) != 0 {
-		t.Fatalf("tags did not follow unchanged text occurrences: %+v", got)
 	}
 	plan := ImportPlan{Items: []ImportItem{{Mode: ImportAppend, TargetID: id, Text: "extra"}}}
-	s.PreviewImport(plan)
-	afterPreview, _ := s.ListItems(id)
-	if !reflect.DeepEqual(got, afterPreview) {
-		t.Fatal("preview mutated text tags")
-	}
 	if _, _, err := s.ApplyImport(plan); err != nil {
 		t.Fatal(err)
 	}
-	afterImport, _ := s.ListItems(id)
-	if !slices.Equal(afterImport.Items[1].TagIDs, []string{a}) || len(afterImport.Items[4].TagIDs) != 0 {
-		t.Fatal("append lost tags")
+	if got := listTags(t, s, id); !slices.Equal(got, []string{a, b}) {
+		t.Fatalf("editing or importing content dropped the list's tags: %v", got)
 	}
-	if _, err := s.Undo(); err != nil {
-		t.Fatal(err)
-	}
-	undone, _ := s.ListItems(id)
-	if !reflect.DeepEqual(got, undone) {
-		t.Fatalf("undo lost tags: %+v", undone)
-	}
-	if _, err := s.SetItemTags(id, []int{0}, []string{a}, before.UpdatedAt, "set"); err == nil {
-		t.Fatal("stale line revision accepted")
-	}
+
 	if _, err := s.DeleteTag(a); err != nil {
 		t.Fatal(err)
 	}
-	deleted, _ := s.ListItems(id)
-	if len(deleted.Items[1].TagIDs) != 0 {
-		t.Fatal("deleted tag remains assigned")
-	}
-	if _, err := s.Extract([]PickRequest{{ListID: id, Count: 1, Repeat: 1, TagIDs: []string{a}}}); err == nil {
-		t.Fatal("deleted filter must fail instead of widening the pool")
+	if got := listTags(t, s, id); !slices.Equal(got, []string{b}) {
+		t.Fatalf("deleted tag still on the list: %v", got)
 	}
 	if _, err := s.Undo(); err != nil {
 		t.Fatal(err)
 	}
-	restored, _ := s.ListItems(id)
-	if !reflect.DeepEqual(got, restored) {
-		t.Fatal("tag deletion undo did not restore assignments")
+	if got := listTags(t, s, id); !slices.Equal(got, []string{a, b}) {
+		t.Fatalf("undoing a tag deletion did not put it back on the list: %v", got)
 	}
 }
 
-func TestTextTagBatchValidationAndIsolation(t *testing.T) {
-	s, id, a, b := tagStore(t)
-	setTags(t, s, id, []int{0, 1}, []string{a, a}, "set")
-	setTags(t, s, id, []int{1}, []string{b}, "add")
-	setTags(t, s, id, []int{0, 1}, []string{a}, "remove")
-	items, _ := s.ListItems(id)
-	if len(items.Items[0].TagIDs) != 0 || !slices.Equal(items.Items[1].TagIDs, []string{b}) {
-		t.Fatalf("remove erased other tags: %+v", items)
+func TestTagColors(t *testing.T) {
+	s, _, a, _ := tagStore(t)
+	tags := s.Snapshot().Tags
+	if !validColor(tags[0].Color) || !validColor(tags[1].Color) || tags[0].Color == tags[1].Color {
+		t.Fatalf("new tags must get distinct valid colors: %+v", tags)
 	}
-	before, _ := s.ExportData()
-	for _, tc := range []struct {
-		indexes  []int
-		tags     []string
-		revision int64
-		action   string
-	}{
-		{[]int{0, 99}, []string{a}, items.UpdatedAt, "set"},
-		{[]int{0}, []string{"missing"}, items.UpdatedAt, "set"},
-		{[]int{0}, []string{a}, items.UpdatedAt - 1, "set"},
-		{nil, []string{a}, items.UpdatedAt, "set"},
-		{[]int{0}, []string{a}, items.UpdatedAt, "invalid"},
-	} {
-		if _, err := s.SetItemTags(id, tc.indexes, tc.tags, tc.revision, tc.action); err == nil {
-			t.Fatal("invalid batch accepted")
-		}
-		after, _ := s.ExportData()
-		if string(before) != string(after) {
-			t.Fatal("failed batch partially changed stored tags")
-		}
+	if _, err := s.SetTagColor(a, "nope"); err == nil {
+		t.Fatal("invalid color accepted")
 	}
-	items.Items[1].TagIDs[0] = "changed"
-	stored, _ := s.ListItems(id)
-	if stored.Items[1].TagIDs[0] != b {
-		t.Fatal("returned item tags alias stored state")
+	if _, err := s.SetTagColor("missing", "rose"); err == nil {
+		t.Fatal("color set on a missing tag")
+	}
+	snap, err := s.SetTagColor(a, "rose")
+	if err != nil || snap.Tags[0].Color != "rose" {
+		t.Fatalf("color not saved: %+v %v", snap.Tags, err)
 	}
 }
 
-func TestTagsBackupPersistenceAndOldLibraryCompatibility(t *testing.T) {
+func TestTagsBackupAndOldLibraryCompatibility(t *testing.T) {
 	s, id, a, _ := tagStore(t)
-	setTags(t, s, id, []int{1}, []string{a}, "set")
-	picks := map[string]Pick{id: {Count: 1, Repeat: 4, Mode: RepeatRandom, TagIDs: []string{a}}}
-	if _, _, err := s.SavePreset("新品链接", picks); err != nil {
+	if _, err := s.SetListTags(id, []string{a}); err != nil {
 		t.Fatal(err)
 	}
-	picks[id].TagIDs[0] = "alias"
 	backup, _ := s.ExportData()
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(backup, &raw); err != nil || len(raw["tags"]) == 0 {
+		t.Fatal("tags missing in backup")
+	}
 	reopened, err := Open(s.Dir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, _ := reopened.ListItems(id)
-	if !slices.Equal(items.Items[1].TagIDs, []string{a}) {
-		t.Fatal("tags lost on reopen")
-	}
-	if reopened.Snapshot().Presets[0].Picks[id].TagIDs[0] != a {
-		t.Fatal("preset tags alias caller state")
+	if got := listTags(t, reopened, id); !slices.Equal(got, []string{a}) {
+		t.Fatalf("list tags lost on reopen: %v", got)
 	}
 	other, _ := Open(t.TempDir())
 	if _, err := other.RestoreData(backup); err != nil {
 		t.Fatal(err)
 	}
-	restored, _ := other.ListItems(id)
-	if !reflect.DeepEqual(items, restored) {
-		t.Fatal("backup restore lost tag assignments")
+	if got := listTags(t, other, id); !slices.Equal(got, []string{a}) {
+		t.Fatalf("backup restore lost list tags: %v", got)
 	}
-	old := []byte(`{"version":1,"groups":[],"lists":[{"id":"old","name":"旧素材","items":["a","b"]}],"presets":[],"draft":{}}`)
-	if _, err := other.RestoreData(old); err != nil {
+
+	// 没有标签的旧素材库。
+	plain := []byte(`{"version":1,"groups":[],"lists":[{"id":"old","name":"旧素材","items":["a","b"]}],"presets":[],"draft":{}}`)
+	if _, err := other.RestoreData(plain); err != nil {
 		t.Fatal(err)
 	}
-	oldItems, _ := other.ListItems("old")
-	if len(oldItems.Items) != 2 || oldItems.Items[0].TagIDs == nil {
-		t.Fatalf("old data not normalized: %+v", oldItems)
+	if got := listTags(t, other, "old"); got == nil || len(got) != 0 {
+		t.Fatalf("old data not normalized: %#v", got)
 	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(backup, &raw); err != nil || len(raw["tags"]) == 0 {
-		t.Fatal("tags missing in backup")
+
+	// 早先按行贴标签的素材库：行上的标签并到分类上，没有颜色的标签补上颜色，
+	// 方案里按标签筛选的条件不再使用，数量和乘数规则照旧。
+	lines := []byte(`{"version":1,"groups":[],
+		"tags":[{"id":"t1","name":"甲"},{"id":"t2","name":"乙","color":"bad"},{"id":"t3","name":"丙"}],
+		"lists":[{"id":"l1","name":"链接","items":["a","b","c"],"itemTags":[["t2"],[],["t1","t2","gone"]]}],
+		"presets":[{"id":"p1","name":"方案","picks":{"l1":{"count":2,"repeat":3,"mode":"cycle","tagIds":["t1"]}}}],
+		"draft":{}}`)
+	snap, err := other.RestoreData(lines)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if !slices.Equal(snap.Lists[0].TagIDs, []string{"t1", "t2"}) {
+		t.Fatalf("line tags not merged onto the list: %v", snap.Lists[0].TagIDs)
+	}
+	if snap.Tags[0].Color != GroupColors[0] || snap.Tags[1].Color != GroupColors[1] {
+		t.Fatalf("old tags not given colors: %+v", snap.Tags)
+	}
+	if p := snap.Presets[0].Picks["l1"]; p.Count != 2 || p.Repeat != 3 || p.Mode != RepeatCycle {
+		t.Fatalf("old preset lost its numbers: %+v", p)
+	}
+	saved, _ := other.ExportData()
+	if err := json.Unmarshal(saved, &raw); err != nil || containsKey(raw["lists"], "itemTags") {
+		t.Fatal("per-line tags written back out")
+	}
+}
+
+func containsKey(raw json.RawMessage, key string) bool {
+	var lists []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &lists); err != nil {
+		return false
+	}
+	for _, l := range lists {
+		if _, ok := l[key]; ok {
+			return true
+		}
+	}
+	return false
 }

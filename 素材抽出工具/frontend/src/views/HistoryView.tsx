@@ -3,11 +3,11 @@ import { ClipboardCopy, FileDown, History, ListRestart, Trash2 } from 'lucide-re
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { num, partLabel, stamp, when } from '../lib/format'
-import { picksRule, picksToDraft, ruleNote } from '../lib/pick'
+import { picksMode, picksToDraft, ruleNote } from '../lib/pick'
 import type { HistoryEntry, Pick } from '../types'
 
 export function HistoryView() {
-  const { historyVersion, run, toast, confirm, setDraft, setRepeatMode, setTagFilter, go, snap, bumpHistory } = useApp()
+  const { historyVersion, run, toast, confirm, setDraft, setRepeatMode, go, snap, bumpHistory } = useApp()
   const [items, setItems] = useState<HistoryEntry[] | null>(null)
   const [selId, setSelId] = useState('')
   const [text, setText] = useState<{ id: string; text: string | null; error?: string } | null>(null)
@@ -46,11 +46,9 @@ export function HistoryView() {
     if (!sel) return
     const picks: Record<string, Pick> = {}
     for (const p of sel.parts) if (snap.lists.some(l => l.id === p.listId)) picks[p.listId] = { count: p.count, repeat: p.repeat }
-    // 乘数规则和标签筛选一起带回去；标签已被删除时，抽取页会要求重新选择，不会改成抽取全部文本。
-    const rule = picksRule(sel.parts)
+    // 乘数规则一起带回去。
     setDraft(picksToDraft(picks))
-    setRepeatMode(rule.mode)
-    setTagFilter(rule.tagIds)
+    setRepeatMode(picksMode(sel.parts))
     go('extract')
   }
 
@@ -80,8 +78,8 @@ export function HistoryView() {
 
   const lines = text?.text ? text.text.split('\n', 500) : []
   const missing = sel ? sel.parts.filter(p => !snap.lists.some(l => l.id === p.listId)).length : 0
-  /** “上衣 25×4、裤子 10 · 循环重复 · 标签：新品” */
-  const summary = (h: HistoryEntry) => [h.parts.map(partLabel).join('、'), ruleNote(h.parts, snap.tags)].filter(Boolean).join(' · ')
+  /** “上衣 25×4、裤子 10 · 循环重复” */
+  const summary = (h: HistoryEntry) => [h.parts.map(partLabel).join('、'), ruleNote(h.parts)].filter(Boolean).join(' · ')
 
   return (
     <div className="history">
@@ -123,7 +121,7 @@ export function HistoryView() {
                 <FileDown size={16} />
                 保存为 TXT
               </button>
-              <button className="btn" onClick={reuse} title="把这次的数量、乘数规则和标签筛选填到抽取页，重新抽一批">
+              <button className="btn" onClick={reuse} title="把这次的数量和乘数规则填到抽取页，重新抽一批">
                 <ListRestart size={16} />
                 按这组数量再抽一次
               </button>

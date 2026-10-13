@@ -3,7 +3,6 @@ package library
 import (
 	"fmt"
 	"math/rand/v2"
-	"slices"
 	"strings"
 )
 
@@ -18,20 +17,18 @@ func validRepeatMode(mode string) bool {
 }
 
 type PickRequest struct {
-	ListID string   `json:"listId"`
-	Count  int      `json:"count"`
-	Repeat int      `json:"repeat"`
-	Mode   string   `json:"mode,omitempty"`
-	TagIDs []string `json:"tagIds,omitempty"`
+	ListID string `json:"listId"`
+	Count  int    `json:"count"`
+	Repeat int    `json:"repeat"`
+	Mode   string `json:"mode,omitempty"`
 }
 
 type PickPart struct {
-	ListID string   `json:"listId"`
-	Name   string   `json:"name"`
-	Count  int      `json:"count"`
-	Repeat int      `json:"repeat"`
-	Mode   string   `json:"mode,omitempty"`
-	TagIDs []string `json:"tagIds,omitempty"`
+	ListID string `json:"listId"`
+	Name   string `json:"name"`
+	Count  int    `json:"count"`
+	Repeat int    `json:"repeat"`
+	Mode   string `json:"mode,omitempty"`
 }
 
 type ExtractResult struct {
@@ -78,7 +75,7 @@ func Extract(lists []List, reqs []PickRequest, r *rand.Rand) (ExtractResult, err
 		if req.Repeat < 1 {
 			return ExtractResult{}, userErr("「%s」的乘数至少为 1", l.Name)
 		}
-		pool := matchingItems(*l, req.TagIDs)
+		pool := l.Items
 		if req.Repeat > 1 || mode == RepeatRandom {
 			pool = dedupe(pool)
 		}
@@ -105,7 +102,7 @@ func Extract(lists []List, reqs []PickRequest, r *rand.Rand) (ExtractResult, err
 
 	parts := make([]PickPart, 0, len(jobs))
 	for _, j := range jobs {
-		parts = append(parts, PickPart{ListID: j.list.ID, Name: j.list.Name, Count: j.req.Count, Repeat: j.req.Repeat, Mode: mode, TagIDs: slices.Clone(j.req.TagIDs)})
+		parts = append(parts, PickPart{ListID: j.list.ID, Name: j.list.Name, Count: j.req.Count, Repeat: j.req.Repeat, Mode: mode})
 	}
 	type selected struct {
 		line   string

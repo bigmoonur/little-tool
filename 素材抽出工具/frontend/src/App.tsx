@@ -99,7 +99,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   const [draft, setDraft] = useState<Draft>(() => picksToDraft(init.snapshot.draft ?? {}))
   const remembered = Object.values(init.snapshot.draft ?? {})[0]
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(remembered?.mode ?? 'consecutive')
-  const [tagFilter, setTagFilter] = useState<string[]>(remembered?.tagIds ?? [])
+  const [tagFilter, setTagFilter] = useState<string[]>([])
   const [lastExtraction, setLastExtraction] = useState<{ response: Extracted; requests: PickRequest[] } | null>(null)
   const [selectedId, setSelectedId] = useState('')
   const [importInit, setImportInit] = useState<ImportOpen | null>(null)
@@ -193,9 +193,9 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   // 记住数量（设置中开启时）
   useEffect(() => {
     if (!snap.settings.rememberDraft) return
-    const t = window.setTimeout(() => api.saveDraft(draftToPicks(draft, snap.lists, repeatMode, tagFilter)), 600)
+    const t = window.setTimeout(() => api.saveDraft(draftToPicks(draft, snap.lists, repeatMode)), 600)
     return () => window.clearTimeout(t)
-  }, [draft, snap.lists, repeatMode, tagFilter, snap.settings.rememberDraft])
+  }, [draft, snap.lists, repeatMode, snap.settings.rememberDraft])
 
   const noticeShown = useRef(false)
   useEffect(() => {

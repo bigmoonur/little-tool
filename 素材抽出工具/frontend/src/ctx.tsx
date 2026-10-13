@@ -29,6 +29,7 @@ export interface Ctx {
   setDraft: React.Dispatch<React.SetStateAction<Draft>>
   repeatMode: RepeatMode
   setRepeatMode: (v: RepeatMode) => void
+  /** 抽取页只看带这些标签的分类；放在这里，切换页面再回来还在。 */
   tagFilter: string[]
   setTagFilter: React.Dispatch<React.SetStateAction<string[]>>
   lastExtraction: { response: Extracted; requests: PickRequest[] } | null

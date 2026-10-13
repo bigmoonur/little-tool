@@ -303,7 +303,7 @@ func (a *App) DedupeList(id string) (Deduped, error) {
 	return Deduped{snap, n}, err
 }
 
-// ---------- 文本标签 ----------
+// ---------- 标签 ----------
 
 func (a *App) CreateTag(name string) (Created, error) {
 	if err := a.requireLicense(); err != nil {
@@ -320,6 +320,13 @@ func (a *App) RenameTag(id, name string) (library.Snapshot, error) {
 	return a.store.RenameTag(id, name)
 }
 
+func (a *App) SetTagColor(id, color string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
+	return a.store.SetTagColor(id, color)
+}
+
 func (a *App) DeleteTag(id string) (library.Snapshot, error) {
 	if err := a.requireLicense(); err != nil {
 		return library.Snapshot{}, err
@@ -327,17 +334,11 @@ func (a *App) DeleteTag(id string) (library.Snapshot, error) {
 	return a.store.DeleteTag(id)
 }
 
-func (a *App) ListItems(id string) (library.ListItems, error) { return a.store.ListItems(id) }
-
-func (a *App) SetItemTags(id string, indexes []int, tagIDs []string, updatedAt int64, action string) (library.Snapshot, error) {
+func (a *App) SetListTags(id string, tagIDs []string) (library.Snapshot, error) {
 	if err := a.requireLicense(); err != nil {
 		return library.Snapshot{}, err
 	}
-	return a.store.SetItemTags(id, indexes, tagIDs, updatedAt, action)
-}
-
-func (a *App) AvailableLists(tagIDs []string) ([]library.ListInfo, error) {
-	return a.store.AvailableLists(tagIDs)
+	return a.store.SetListTags(id, tagIDs)
 }
 
 // ---------- 导入 ----------
