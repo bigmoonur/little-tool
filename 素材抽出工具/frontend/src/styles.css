@@ -3403,3 +3403,12 @@ kbd {
     transition: none !important;
   }
 }
+
+/* 滚动条平时不显示，鼠标移到可以滚动的区域上才出现。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--line-strong) transparent;
+}
