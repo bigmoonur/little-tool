@@ -544,10 +544,10 @@ kbd {
 .pick-head,
 .pick-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px 86px 76px;
-  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr) 96px 86px 76px;
+  gap: 8px;
   align-items: center;
-  padding: 0 18px;
+  padding: 0 18px 0 6px;
 }
 .pick-head {
   height: 36px;
@@ -557,24 +557,69 @@ kbd {
   border-bottom: 1px solid var(--line);
 }
 
+.pick-section {
+  position: relative;
+}
 .pick-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 40px;
-  padding: 0 18px 0 12px;
-  border: 0;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 18px 0 6px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
+}
+.pick-group-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
   text-align: left;
   cursor: pointer;
 }
-.pick-group:disabled {
+.pick-group-toggle:disabled {
   cursor: default;
 }
 .pick-section + .pick-section .pick-group {
   border-top: 1px solid var(--line);
+}
+/* 拖动手柄：只有它能开始拖动；点一下或用方向键也可以移动。 */
+.grip {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 36px;
+  border-radius: var(--r-s);
+  color: var(--ink-3);
+  cursor: grab;
+  flex: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: element;
+}
+.grip > svg {
+  pointer-events: none;
+}
+.grip:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.grip:active {
+  cursor: grabbing;
+}
+.grip[draggable="false"] {
+  opacity: 0.4;
+  cursor: default;
+  -webkit-user-drag: none;
+}
+.grip-space {
+  width: 28px;
+  flex: none;
 }
 .pick-group .chev {
   flex: none;
@@ -607,6 +652,12 @@ kbd {
   color: var(--ink-3);
   font-size: 12.5px;
 }
+.pick-group-drop {
+  color: var(--focus);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .pick-group-sub {
   flex: none;
   white-space: nowrap;
@@ -625,6 +676,32 @@ kbd {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
   transition: background 0.12s;
+}
+.pick-row.is-moving,
+.pick-section.is-moving {
+  opacity: 0.45;
+}
+/* 放下的位置：分类之间、分组之间用一条粗线标出。 */
+.pick-row.drop-before::after,
+.pick-row.drop-after::after,
+.pick-section.drop-before::after,
+.pick-section.drop-after::after {
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 2;
+}
+.pick-row.drop-before::after {
+  top: -2px;
+}
+.pick-row.drop-after::after {
+  bottom: -2px;
+}
+.pick-section.drop-before::after {
+  top: 0;
+}
+.pick-section.drop-after::after {
+  bottom: 0;
 }
 .pick-section:last-child .pick-row:last-child {
   border-bottom: 0;
@@ -696,8 +773,25 @@ kbd {
   flex-wrap: wrap;
   gap: 4px 12px;
   min-height: 52px;
-  padding: 8px 16px;
+  padding: 8px 16px 8px 42px;
+  border-bottom: 1px solid var(--line);
   color: var(--ink-3);
+}
+.pick-section:last-child .pick-empty {
+  border-bottom: 0;
+}
+.pick-table.is-moving-category .pick-empty {
+  color: var(--focus);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--select) 55%, var(--surface));
+  outline: 2px dashed var(--focus);
+  outline-offset: -6px;
+}
+/* 把分类放进分组：整个分组高亮。 */
+.pick-section.drop-into .pick-group,
+.pick-section.drop-into .pick-empty {
+  background: transparent;
+  outline: 0;
 }
 .pick-meta {
   font-size: 12.5px;
@@ -3077,7 +3171,7 @@ kbd {
 @media (max-width: 1000px) {
   .pick-head,
   .pick-row {
-    grid-template-columns: minmax(0, 1fr) 96px 86px;
+    grid-template-columns: 28px minmax(0, 1fr) 96px 86px;
   }
   .pick-col-out,
   .mode-switch-label,

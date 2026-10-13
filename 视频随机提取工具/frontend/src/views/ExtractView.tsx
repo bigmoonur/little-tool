@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BookmarkPlus, Check, ChevronDown, Eraser, FolderOpen, FolderPlus, Layers, Plus, RefreshCw, Settings2, Tags, TriangleAlert, X,
+  ArrowDown, ArrowUp, BookmarkPlus, Check, ChevronDown, Eraser, FolderInput, FolderOpen, FolderPlus, GripVertical, Layers, Plus, RefreshCw, Settings2,
+  Tags, TriangleAlert, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { useCategoryTagging } from '../dialogs/CategoryTagging'
 import { PresetManager } from '../dialogs/PresetManager'
 import { bytes, clock, num, shortPath } from '../lib/format'
-import { buildSections } from '../lib/reorder'
+import { buildSections, useReorder } from '../lib/reorder'
 import { validateFolderName } from '../lib/names'
 import { draftToPicks, evaluate, modeInfo, picksToDraft, ruleLine, samePicks, splitCombined, usesRule, type RowState } from '../lib/pick'
 import type { Category, Item, Tag } from '../types'
@@ -22,6 +23,8 @@ function groupItems(items: Item[]) {
   return [...map.entries()]
 }
 
+type Kind = 'category' | 'group'
+
 export function ExtractView() {
   const {
     state, setState, refresh, run, prompt, confirm, toast, copy, startCopy, cancelCopy, clearResult, draft, setDraft, repeatMode, setRepeatMode, adding,
@@ -32,6 +35,8 @@ export function ExtractView() {
   const tagging = useCategoryTagging()
   const menu = useMenu()
   const inputs = useRef(new Map<string, HTMLInputElement>())
+  // 调整顺序之后要取回焦点的元素：手柄、输入框、分组标题。
+  const anchors = useRef(new Map<string, HTMLElement>())
   const doneBtn = useRef<HTMLButtonElement>(null)
   const copying = copy.phase === 'copying'
   const busy = copying || !!adding
@@ -57,6 +62,8 @@ export function ExtractView() {
   // 只按还在的标签筛选，标签被删除后自动不再算数。
   const activeTags = tagFilter.filter(id => tagById.has(id))
   const filtering = activeTags.length > 0
+  // 拖到分组标题时保留折叠状态；菜单和键盘移入时展开分组，方便取回焦点。
+  const reorder = useReorder(filtering, false)
   const toggleTag = (id: string) => setTagFilter(activeTags.includes(id) ? activeTags.filter(x => x !== id) : [...activeTags, id])
   const tagTotal = (id: string) => state.categories.filter(c => c.tagIds.includes(id)).length
   // 筛选时只留下带所选标签的分类。已经填了数量的分类不隐藏，免得抽到看不见的内容。
@@ -68,6 +75,10 @@ export function ExtractView() {
   // 回车依次经过的输入框：看得见的、有视频可抽的分类。
   const order = sections.flatMap(sec => sec.group?.collapsed && !filtering ? [] : sec.categories.filter(c => c.count > 0).map(c => c.name))
   const ready = !!folder && total > 0 && errors.length === 0 && !copying && !adding
+
+  useEffect(() => {
+    if (reorder.disabled) menu.close()
+  }, [reorder.disabled])
 
   // 换了文件夹或文件夹里没有视频时，取消“清空旧视频”。
   useEffect(() => {
@@ -143,9 +154,13 @@ export function ExtractView() {
       return next === e ? d : { ...d, [name]: next }
     })
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, name: string) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, name: string, part: 'count' | 'repeat') => {
     const i = order.indexOf(name)
-    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      // Alt + 上下方向键：移动这一行，焦点留在原来的输入框里。
+      e.preventDefault()
+      move('category', name, e.key === 'ArrowUp' ? -1 : 1, `${part}:${name}`)
+    } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       normalize(name)
       if (e.shiftKey) return focusRow(order[i - 1])
@@ -251,6 +266,104 @@ export function ExtractView() {
     menu.open(anchorOf(el), items, 260)
   }
 
+  // ---------- 调整顺序：拖动手柄，或用手柄菜单、Alt + 方向键 ----------
+
+  const anchor = (key: string) => (el: HTMLElement | null) => {
+    if (el) anchors.current.set(key, el)
+    else anchors.current.delete(key)
+  }
+
+  // 跨分组移动时这一行会被重新创建，等界面更新完再把焦点放回去。
+  const refocus = (key: string) => requestAnimationFrame(() => requestAnimationFrame(() => anchors.current.get(key)?.focus()))
+
+  /** 移动一格。focus 是移动后取回焦点的位置，默认是它的手柄。 */
+  const move = async (kind: Kind, id: string, delta: -1 | 1, focus = `grip:${kind}:${id}`) => {
+    if (reorder.disabled) return
+    await (kind === 'category' ? reorder.moveCategoryBy(id, delta) : reorder.moveGroupBy(id, delta))
+    refocus(focus)
+  }
+
+  const openMoveMenu = (el: HTMLElement, kind: Kind, id: string) => {
+    if (reorder.disabled) return
+    const items: MenuItem[] = []
+    if (kind === 'group') {
+      const i = state.groups.findIndex(g => g.id === id)
+      items.push(
+        { label: '上移', icon: <ArrowUp size={15} />, hint: 'Alt+↑', disabled: i <= 0, onSelect: () => move(kind, id, -1) },
+        { label: '下移', icon: <ArrowDown size={15} />, hint: 'Alt+↓', disabled: i === state.groups.length - 1, onSelect: () => move(kind, id, 1) },
+      )
+    } else {
+      const c = state.categories.find(x => x.name === id)
+      if (!c) return
+      const toGroup = async (groupId: string) => {
+        await reorder.moveCategoryTo(id, groupId)
+        refocus(`grip:category:${id}`)
+      }
+      // 分组里的第一个还能上移到前一个分组，所以只有头尾两个分组的边缘才不能再移。
+      const tail = sections[sections.length - 1].categories
+      const first = sections[0].categories[0]?.name === id
+      const last = tail[tail.length - 1]?.name === id
+      items.push(
+        { label: '上移', icon: <ArrowUp size={15} />, hint: 'Alt+↑', disabled: first, onSelect: () => move(kind, id, -1) },
+        { label: '下移', icon: <ArrowDown size={15} />, hint: 'Alt+↓', disabled: last, onSelect: () => move(kind, id, 1) },
+      )
+      if (state.groups.length) {
+        items.push({ divider: true }, { heading: '移动到分组' })
+        for (const g of state.groups) {
+          const here = c.groupId === g.id
+          items.push({ label: g.name, icon: here ? <Check size={15} /> : <FolderInput size={15} />, disabled: here, onSelect: () => toGroup(g.id) })
+        }
+        items.push({ label: '未分组', icon: !c.groupId ? <Check size={15} /> : <FolderInput size={15} />, disabled: !c.groupId, onSelect: () => toGroup('') })
+      }
+    }
+    menu.open(anchorOf(el), items, 200)
+  }
+
+  const dragStart = (e: React.DragEvent<HTMLElement>, kind: Kind, id: string) => {
+    reorder.start(e, kind, id)
+    // 拖动时带着整行走，而不是只有一个小手柄。
+    const row = e.currentTarget.closest<HTMLElement>('.pick-row, .pick-group')
+    if (row && !e.isDefaultPrevented()) {
+      const r = row.getBoundingClientRect()
+      e.dataTransfer.setDragImage(row, e.clientX - r.left, e.clientY - r.top)
+    }
+  }
+
+  const onDrop = async (e: React.DragEvent) => {
+    const active = reorder.active
+    if (reorder.disabled) return
+    await reorder.onDrop(e)
+    if (active) refocus(`grip:${active.kind}:${active.id}`)
+  }
+
+  // 只有手柄可以拖动；不占用 Tab 顺序，免得打断逐行填写数量。
+  const grip = (kind: Kind, id: string, name: string) => {
+    const what = kind === 'category' ? '分类' : '分组'
+    return (
+      <span
+        ref={anchor(`grip:${kind}:${id}`)}
+        className="grip"
+        role="button"
+        tabIndex={-1}
+        draggable={!reorder.disabled}
+        aria-label={`移动${what}「${name}」`}
+        aria-haspopup="menu"
+        aria-disabled={reorder.disabled}
+        title={filtering ? '正在按标签筛选，点“全部”显示所有分类后才能调整顺序' : `按住拖动可以调整${what}的顺序；点一下可以选择上移、下移`}
+        onDragStart={e => dragStart(e, kind, id)}
+        onDragEnd={reorder.end}
+        onClick={e => openMoveMenu(e.currentTarget, kind, id)}
+        onKeyDown={e => {
+          if (reorder.disabled || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+          e.preventDefault()
+          move(kind, id, e.key === 'ArrowUp' ? -1 : 1)
+        }}
+      >
+        <GripVertical size={18} />
+      </span>
+    )
+  }
+
   if (!state.materialRoot || !state.outputRoot) return <Setup />
 
   const addTag = (c: Category) => (
@@ -271,6 +384,7 @@ export function ExtractView() {
   const pct = progress ? Math.min(100, Math.floor((progress.bytesDone / Math.max(1, progress.bytesTotal)) * 100)) : 0
   const result = copy.phase === 'done' && copy.done?.ok ? copy.done.result : null
   const failure = copy.phase === 'done' && copy.done && !copy.done.ok && !copy.done.cancelled ? copy.done.error : ''
+  const draggingCategory = reorder.active?.kind === 'category'
 
   return (
     <div className="extract">
@@ -332,7 +446,11 @@ export function ExtractView() {
               <span className="toolbar-spacer" />
               <ModeSwitch value={repeatMode} onChange={setRepeatMode} disabled={busy} />
             </div>
-            <div className="pick-table" role="table">
+            <div
+              className={`pick-table ${reorder.active ? `is-moving-${reorder.active.kind}` : ''}`}
+              role="table"
+              onDragLeave={reorder.leave}
+            >
               {state.tags.length > 0 && (
                 <div className="tag-bar" role="group" aria-label="按标签筛选分类">
                   <span className="tag-bar-label" title="点标签，只显示带这个标签的分类">
@@ -370,6 +488,7 @@ export function ExtractView() {
                 </div>
               )}
               <div className="pick-head" role="row">
+                <span aria-hidden />
                 <span role="columnheader">分类</span>
                 <span role="columnheader" className="ta-c">数量</span>
                 <span role="columnheader" className="ta-c">乘数</span>
@@ -377,37 +496,68 @@ export function ExtractView() {
               </div>
               {sections.map(sec => {
                 const g = sec.group
+                const gid = g?.id ?? ''
                 const collapsed = !!g?.collapsed && !filtering
                 const sub = sec.categories.reduce((sum, c) => sum + (rows.get(c.name)?.files ?? 0), 0)
+                const showHeader = g || state.groups.length > 0
+                // 空的“未分组”只在拖动分类时出现，作为把分类移出分组的落点。
+                if (!g && showHeader && !sec.categories.length && !draggingCategory) return null
+                const into = !!reorder.dropClass('group-into', gid)
+                const moving = reorder.active?.kind === 'group' && reorder.active.id === gid
                 return (
-                  <div key={g?.id ?? 'loose'} className={`pick-section ${g ? `c-${g.color}` : 'c-none'}`} role="rowgroup">
-                    {(g || state.groups.length > 0) && (
-                      <button
-                        className={`pick-group ${collapsed ? 'is-collapsed' : ''}`}
-                        disabled={!g || busy || filtering}
-                        aria-expanded={g ? !collapsed : undefined}
-                        onClick={async () => {
-                          if (!g || busy || filtering) return
-                          const s = await run(api.setGroupCollapsed(g.id, !g.collapsed))
-                          if (s) setState(s)
-                        }}
-                      >
-                        {g ? <ChevronDown size={14} className="chev" /> : <span className="chev-space" />}
-                        <span className="group-dot" />
-                        <span className="pick-group-name">{g?.name ?? '未分组'}</span>
-                        <span className="pick-group-meta">{sec.categories.length} 个分类</span>
+                  <div
+                    key={gid || 'loose'}
+                    className={`pick-section ${g ? `c-${g.color}` : 'c-none'} ${into ? 'drop-into' : ''} ${g ? reorder.dropClass('group', gid) : ''} ${moving ? 'is-moving' : ''}`}
+                    role="rowgroup"
+                    onDragEnter={e => reorder.overGroup(e, gid)}
+                    onDragOver={e => reorder.overGroup(e, gid)}
+                    onDrop={onDrop}
+                  >
+                    {showHeader && (
+                      <div className={`pick-group ${collapsed ? 'is-collapsed' : ''}`}>
+                        {g ? grip('group', g.id, g.name) : <span className="grip-space" />}
+                        <button
+                          ref={anchor(`toggle:${gid}`)}
+                          className="pick-group-toggle"
+                          disabled={!g || reorder.disabled}
+                          aria-expanded={g ? !collapsed : undefined}
+                          onClick={async () => {
+                            if (!g || reorder.disabled) return
+                            const s = await run(api.setGroupCollapsed(g.id, !g.collapsed))
+                            if (s) setState(s)
+                          }}
+                          onKeyDown={e => {
+                            if (!g || reorder.disabled || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+                            e.preventDefault()
+                            move('group', g.id, e.key === 'ArrowUp' ? -1 : 1, `toggle:${g.id}`)
+                          }}
+                        >
+                          {g && <ChevronDown size={14} className="chev" />}
+                          <span className="group-dot" />
+                          <span className="pick-group-name">{g?.name ?? '未分组'}</span>
+                          {into ? (
+                            <span className="pick-group-drop">松开鼠标，放到{g ? '这个分组' : '“未分组”'}的最后</span>
+                          ) : (
+                            <span className="pick-group-meta">{sec.categories.length} 个分类</span>
+                          )}
+                        </button>
                         {sub > 0 && <span className="pick-group-sub">{num(sub)} 个视频</span>}
-                      </button>
+                      </div>
                     )}
                     {!collapsed && sec.categories.map(c => {
                       const r = rows.get(c.name)!
                       const empty = c.count === 0
+                      const movingRow = draggingCategory && reorder.active?.id === c.name
                       return (
                         <div
                           key={c.name}
                           role="row"
-                          className={`pick-row ${r.count > 0 ? 'is-active' : ''} ${r.error ? 'is-error' : ''} ${empty ? 'is-empty' : ''}`}
+                          className={`pick-row ${r.count > 0 ? 'is-active' : ''} ${r.error ? 'is-error' : ''} ${empty ? 'is-empty' : ''} ${movingRow ? 'is-moving' : ''} ${reorder.dropClass('category', c.name)}`}
+                          onDragEnter={e => reorder.overCategory(e, c)}
+                          onDragOver={e => reorder.overCategory(e, c)}
+                          onDrop={onDrop}
                         >
+                          <div role="cell">{grip('category', c.name, c.name)}</div>
                           <div className="pick-name" role="cell">
                             <span className="pick-title-row">
                               <span className="pick-title" title={c.name}>
@@ -448,6 +598,7 @@ export function ExtractView() {
                           <div role="cell" className="ta-c">
                             <input
                               ref={el => {
+                                anchor(`count:${c.name}`)(el)
                                 if (el) inputs.current.set(c.name, el)
                                 else inputs.current.delete(c.name)
                               }}
@@ -459,7 +610,7 @@ export function ExtractView() {
                               value={draft[c.name]?.count ?? ''}
                               onChange={e => setEntry(c.name, 'count', e.target.value)}
                               onBlur={() => normalize(c.name)}
-                              onKeyDown={e => onKeyDown(e, c.name)}
+                              onKeyDown={e => onKeyDown(e, c.name, 'count')}
                               onFocus={e => e.target.select()}
                             />
                           </div>
@@ -467,13 +618,14 @@ export function ExtractView() {
                             <label className="rep-input">
                               <span aria-hidden>×</span>
                               <input
+                                ref={anchor(`repeat:${c.name}`)}
                                 inputMode="numeric"
                                 placeholder="1"
                                 disabled={empty || busy}
                                 aria-label={`${c.name} 的乘数`}
                                 value={draft[c.name]?.repeat ?? ''}
                                 onChange={e => setEntry(c.name, 'repeat', e.target.value)}
-                                onKeyDown={e => onKeyDown(e, c.name)}
+                                onKeyDown={e => onKeyDown(e, c.name, 'repeat')}
                                 onFocus={e => e.target.select()}
                               />
                             </label>
@@ -484,7 +636,11 @@ export function ExtractView() {
                         </div>
                       )
                     })}
-                    {!collapsed && g && sec.categories.length === 0 && <div className="pick-empty">这个分组还没有分类，可以在素材库里新建或移入分类。</div>}
+                    {!collapsed && showHeader && sec.categories.length === 0 && (
+                      <div className="pick-empty">
+                        {draggingCategory ? '松开鼠标，把分类放到这里' : '这个分组里还没有分类，可以把分类拖进来'}
+                      </div>
+                    )}
                   </div>
                 )
               })}
