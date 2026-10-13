@@ -175,8 +175,9 @@ export function ExtractView() {
   const extractAgain = () => lastExtraction && perform(lastExtraction.requests, true)
 
   // 抽取完成后焦点移到“复制”按钮：再按回车只会重新复制同一批内容，不会抽新的一批。
+  // 只移焦点，不滚动：右侧停在原来的位置，“本次抽取”和抽取按钮不会被顶出去。
   useEffect(() => {
-    if (flash) copyBtn.current?.focus()
+    if (flash) copyBtn.current?.focus({ preventScroll: true })
   }, [flash])
 
   const extractRef = useRef(extract)
@@ -244,7 +245,7 @@ export function ExtractView() {
   useEffect(() => {
     if (busy || !refocusCopy.current) return
     refocusCopy.current = false
-    copyBtn.current?.focus()
+    copyBtn.current?.focus({ preventScroll: true })
   }, [busy])
 
   const saveResult = async () => {

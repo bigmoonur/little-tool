@@ -3,13 +3,15 @@ import { createPortal } from 'react-dom'
 import type { MenuAnchor } from './Menu'
 
 /** 贴着锚点弹出的小面板。和菜单不同，点里面的内容不会关闭，可以连续操作；点面板外面或按 Esc 关闭。 */
-export function Popover({ anchor, onClose, children, width = 280, label, className = '' }: {
+export function Popover({ anchor, onClose, children, width = 280, label, className = '', trigger }: {
   anchor: MenuAnchor
   onClose: () => void
   children: ReactNode
   width?: number
   label: string
   className?: string
+  /** 打开面板的按钮。点它不算点在面板外面，再点一下收不收起由按钮自己决定。 */
+  trigger?: { current: HTMLElement | null }
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
@@ -36,7 +38,9 @@ export function Popover({ anchor, onClose, children, width = 280, label, classNa
 
   useEffect(() => {
     const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current()
+      const target = e.target as Node
+      if (trigger?.current?.contains(target)) return
+      if (ref.current && !ref.current.contains(target)) closeRef.current()
     }
     // 在捕获阶段处理 Esc：面板开在弹窗里时，只关面板，不把弹窗一起关掉。
     const key = (e: KeyboardEvent) => {

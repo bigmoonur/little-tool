@@ -325,7 +325,8 @@ kbd {
   cursor: pointer;
   flex: none;
 }
-.icon-btn:hover {
+.icon-btn:hover,
+.icon-btn.is-open {
   background: var(--surface-3);
   color: var(--ink);
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { REPEAT_MODES } from '../lib/pick'
 import type { RepeatMode } from '../types'
@@ -8,6 +8,7 @@ import { Popover } from '../ui/Popover'
 /** 乘数规则：三段切换，每段带一个小图样；问号里用同一组示范对比三种规则的输出顺序。 */
 export function ModeSwitch({ value, onChange }: { value: RepeatMode; onChange: (m: RepeatMode) => void }) {
   const [help, setHelp] = useState<MenuAnchor | null>(null)
+  const helpBtn = useRef<HTMLButtonElement>(null)
   return (
     <div className="mode-switch">
       <span className="mode-switch-label" id="mode-label">
@@ -35,16 +36,18 @@ export function ModeSwitch({ value, onChange }: { value: RepeatMode; onChange: (
         ))}
       </div>
       <button
-        className="icon-btn"
+        ref={helpBtn}
+        className={`icon-btn ${help ? 'is-open' : ''}`}
         aria-label="三种乘数规则有什么不同"
         aria-haspopup="dialog"
-        title="三种乘数规则有什么不同"
-        onClick={e => setHelp(anchorOf(e.currentTarget, 'end'))}
+        aria-expanded={!!help}
+        title={help ? '收起说明' : '三种乘数规则有什么不同'}
+        onClick={e => setHelp(help ? null : anchorOf(e.currentTarget, 'end'))}
       >
         <CircleQuestionMark size={18} />
       </button>
       {help && (
-        <Popover anchor={help} onClose={() => setHelp(null)} width={460} label="乘数规则说明" className="mode-help">
+        <Popover anchor={help} onClose={() => setHelp(null)} width={460} label="乘数规则说明" className="mode-help" trigger={helpBtn}>
           <div className="pop-title">三种乘数规则</div>
           <p className="mode-help-lead">
             同样填“数量 2、乘数 3”，都输出 6 条，区别在排列的顺序。字母代表抽到的不同内容：
