@@ -1,3 +1,5 @@
+export type AfterCopy = 'stay' | 'minimize' | 'quit'
+
 export type Theme = 'system' | 'light' | 'dark'
 
 export interface Settings {
@@ -6,6 +8,8 @@ export interface Settings {
   folder: string
   alwaysOnTop: boolean
   openAfter: boolean
+  afterCopy: AfterCopy
+  deleteWithVideos: boolean
   theme: Theme
   rememberDraft: boolean
   /** 记住的数量、乘数和乘数规则（设置里开启时）。 */
@@ -71,7 +75,15 @@ export interface Tag {
   color: TagColor
 }
 
+export interface Group {
+  id: string
+  name: string
+  color: TagColor
+  collapsed: boolean
+}
+
 export interface Category {
+  groupId: string
   name: string
   count: number
   bytes: number
@@ -116,6 +128,7 @@ export interface State {
   outputRoot: string
   folder: string
   categories: Category[]
+  groups: Group[]
   tags: Tag[]
   presets: Preset[]
   destinations: Destination[]

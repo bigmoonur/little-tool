@@ -7,6 +7,7 @@ import { useApp } from '../ctx'
 import { useCategoryTagging } from '../dialogs/CategoryTagging'
 import { PresetManager } from '../dialogs/PresetManager'
 import { bytes, clock, num, shortPath } from '../lib/format'
+import { buildSections } from '../lib/reorder'
 import { validateFolderName } from '../lib/names'
 import { draftToPicks, evaluate, modeInfo, picksToDraft, ruleLine, samePicks, splitCombined, usesRule, type RowState } from '../lib/pick'
 import type { Category, Item, Tag } from '../types'
@@ -33,6 +34,7 @@ export function ExtractView() {
   const inputs = useRef(new Map<string, HTMLInputElement>())
   const doneBtn = useRef<HTMLButtonElement>(null)
   const copying = copy.phase === 'copying'
+  const busy = copying || !!adding
 
   const rows = useMemo(() => {
     const m = new Map<string, RowState>()
@@ -59,9 +61,12 @@ export function ExtractView() {
   const tagTotal = (id: string) => state.categories.filter(c => c.tagIds.includes(id)).length
   // 筛选时只留下带所选标签的分类。已经填了数量的分类不隐藏，免得抽到看不见的内容。
   const shown = (c: Category) => !filtering || c.tagIds.some(id => activeTags.includes(id)) || filled(c.name)
-  const visible = state.categories.filter(shown)
+  const sections = buildSections(state)
+    .map(sec => ({ ...sec, categories: sec.categories.filter(shown) }))
+    .filter(sec => !filtering || sec.categories.length)
+  const visible = sections.flatMap(sec => sec.categories)
   // 回车依次经过的输入框：看得见的、有视频可抽的分类。
-  const order = visible.filter(c => c.count > 0).map(c => c.name)
+  const order = sections.flatMap(sec => sec.group?.collapsed && !filtering ? [] : sec.categories.filter(c => c.count > 0).map(c => c.name))
   const ready = !!folder && total > 0 && errors.length === 0 && !copying && !adding
 
   // 换了文件夹或文件夹里没有视频时，取消“清空旧视频”。
@@ -107,6 +112,20 @@ export function ExtractView() {
 
   const focusRow = (name?: string) => {
     if (!name) return
+    const g = state.groups.find(g => g.id === state.categories.find(c => c.name === name)?.groupId)
+    if (g?.collapsed && !filtering) {
+      run(api.setGroupCollapsed(g.id, false)).then(s => {
+        if (s) {
+          setState(s)
+          requestAnimationFrame(() => {
+            const el = inputs.current.get(name)
+            el?.focus()
+            el?.select()
+          })
+        }
+      })
+      return
+    }
     const el = inputs.current.get(name)
     el?.focus()
     el?.select()
@@ -238,6 +257,7 @@ export function ExtractView() {
     <button
       className={`tag-add ${tagging.openName === c.name ? 'is-open' : ''}`}
       aria-haspopup="dialog"
+      disabled={busy}
       aria-label={`给「${c.name}」贴标签`}
       title="给这个分类贴标签"
       onClick={e => tagging.open(c, e.currentTarget)}
@@ -277,10 +297,10 @@ export function ExtractView() {
           <span className="root-path" title={state.materialRoot}>
             {shortPath(state.materialRoot)}
           </span>
-          <button className="btn btn-ghost btn-sm" onClick={chooseMaterial} disabled={copying}>
+          <button className="btn btn-ghost btn-sm" onClick={chooseMaterial} disabled={busy}>
             更换
           </button>
-          <button className="icon-btn sm" onClick={refresh} aria-label="刷新" title="刷新（回到窗口时也会自动刷新）" disabled={copying}>
+          <button className="icon-btn sm" onClick={refresh} aria-label="刷新" title="刷新（回到窗口时也会自动刷新）" disabled={busy}>
             <RefreshCw size={15} />
           </button>
         </div>
@@ -288,11 +308,11 @@ export function ExtractView() {
         {state.materialError ? (
           <div className="empty-inline is-error">
             <p>{state.materialError}</p>
-            <button className="btn" onClick={chooseMaterial}>
+            <button className="btn" onClick={chooseMaterial} disabled={busy}>
               重新选择素材根目录
             </button>
           </div>
-        ) : state.categories.length === 0 ? (
+        ) : state.categories.length === 0 && state.groups.length === 0 ? (
           <div className="empty-inline">
             <h2>素材根目录里还没有分类</h2>
             <p>在素材根目录里新建子文件夹，每个子文件夹是一个分类，把视频放进去。回到这个窗口时会自动刷新。</p>
@@ -304,13 +324,13 @@ export function ExtractView() {
         ) : (
           <>
             <div className="toolbar">
-              <button className="btn btn-ghost" onClick={e => openPresetMenu(e.currentTarget)} aria-haspopup="menu" disabled={copying}>
+              <button className="btn btn-ghost" onClick={e => openPresetMenu(e.currentTarget)} aria-haspopup="menu" disabled={busy}>
                 <Layers size={16} />
                 {activePreset ? `方案：${activePreset.name}` : '方案'}
                 <ChevronDown size={14} className="dim" />
               </button>
               <span className="toolbar-spacer" />
-              <ModeSwitch value={repeatMode} onChange={setRepeatMode} disabled={copying} />
+              <ModeSwitch value={repeatMode} onChange={setRepeatMode} disabled={busy} />
             </div>
             <div className="pick-table" role="table">
               {state.tags.length > 0 && (
@@ -344,7 +364,7 @@ export function ExtractView() {
                     </span>
                   )}
                   <span className="toolbar-spacer" />
-                  <button className="icon-btn sm" onClick={tagging.manage} aria-label="管理标签" title="管理标签：新建、改名、换颜色、删除">
+                  <button className="icon-btn sm" onClick={tagging.manage} disabled={busy} aria-label="管理标签" title="管理标签：新建、改名、换颜色、删除">
                     <Settings2 size={15} />
                   </button>
                 </div>
@@ -355,88 +375,116 @@ export function ExtractView() {
                 <span role="columnheader" className="ta-c">乘数</span>
                 <span role="columnheader" className="ta-r pick-col-out">本次</span>
               </div>
-              {visible.map(c => {
-                const r = rows.get(c.name)!
-                const empty = c.count === 0
+              {sections.map(sec => {
+                const g = sec.group
+                const collapsed = !!g?.collapsed && !filtering
+                const sub = sec.categories.reduce((sum, c) => sum + (rows.get(c.name)?.files ?? 0), 0)
                 return (
-                  <div
-                    key={c.name}
-                    role="row"
-                    className={`pick-row c-none ${r.count > 0 ? 'is-active' : ''} ${r.error ? 'is-error' : ''} ${empty ? 'is-empty' : ''}`}
-                  >
-                    <div className="pick-name" role="cell">
-                      <span className="pick-title-row">
-                        <span className="pick-title" title={c.name}>
-                          {c.name}
-                        </span>
-                        {c.tagIds.map((id, i) => {
-                          const t = tagById.get(id)
-                          if (!t) return null
-                          const on = activeTags.includes(id)
-                          const pill = (
-                            <button
-                              key={id}
-                              className={`tag-pill is-button c-${t.color} ${on ? 'is-hit' : ''}`}
-                              aria-pressed={on}
-                              onClick={() => toggleTag(id)}
-                              title={on ? `不再按「${t.name}」筛选` : `点一下，只显示带「${t.name}」标签的分类`}
-                            >
-                              <i className="tag-dot" aria-hidden />
-                              <span className="tag-pill-name">{t.name}</span>
-                            </button>
-                          )
-                          // 最后一个标签和“贴标签”的按钮连在一起换行，按钮不会单独掉到下一行。
-                          return i < c.tagIds.length - 1 ? pill : (
-                            <span key={id} className="tag-tail">
-                              {pill}
-                              {addTag(c)}
-                            </span>
-                          )
-                        })}
-                        {!c.tagIds.length && addTag(c)}
-                      </span>
-                      <span className="pick-meta">
-                        {empty ? '没有视频' : `共 ${num(c.count)} 个视频 · ${bytes(c.bytes)}`}
-                        {r.repeat > 1 && r.files > 0 && ` · ${ruleLine(repeatMode, r.count, r.repeat)}`}
-                      </span>
-                      {r.error && <span className="pick-error">{r.error}</span>}
-                    </div>
-                    <div role="cell" className="ta-c">
-                      <input
-                        ref={el => {
-                          if (el) inputs.current.set(c.name, el)
-                          else inputs.current.delete(c.name)
+                  <div key={g?.id ?? 'loose'} className={`pick-section ${g ? `c-${g.color}` : 'c-none'}`} role="rowgroup">
+                    {(g || state.groups.length > 0) && (
+                      <button
+                        className={`pick-group ${collapsed ? 'is-collapsed' : ''}`}
+                        disabled={!g || busy || filtering}
+                        aria-expanded={g ? !collapsed : undefined}
+                        onClick={async () => {
+                          if (!g || busy || filtering) return
+                          const s = await run(api.setGroupCollapsed(g.id, !g.collapsed))
+                          if (s) setState(s)
                         }}
-                        className="num-input"
-                        inputMode="numeric"
-                        placeholder="0"
-                        disabled={empty || copying}
-                        aria-label={`${c.name} 的数量`}
-                        value={draft[c.name]?.count ?? ''}
-                        onChange={e => setEntry(c.name, 'count', e.target.value)}
-                        onBlur={() => normalize(c.name)}
-                        onKeyDown={e => onKeyDown(e, c.name)}
-                        onFocus={e => e.target.select()}
-                      />
-                    </div>
-                    <div role="cell" className="ta-c">
-                      <label className="rep-input">
-                        <span aria-hidden>×</span>
-                        <input
-                          inputMode="numeric"
-                          placeholder="1"
-                          disabled={empty || copying}
-                          aria-label={`${c.name} 的乘数`}
-                          value={draft[c.name]?.repeat ?? ''}
-                          onChange={e => setEntry(c.name, 'repeat', e.target.value)}
-                          onKeyDown={e => onKeyDown(e, c.name)}
-                          onFocus={e => e.target.select()}
-                        />
-                      </label>
-                    </div>
-                    <div role="cell" className="pick-out pick-col-out ta-r">
-                      {r.files > 0 ? num(r.files) : '—'}
-                    </div>
+                      >
+                        {g ? <ChevronDown size={14} className="chev" /> : <span className="chev-space" />}
+                        <span className="group-dot" />
+                        <span className="pick-group-name">{g?.name ?? '未分组'}</span>
+                        <span className="pick-group-meta">{sec.categories.length} 个分类</span>
+                        {sub > 0 && <span className="pick-group-sub">{num(sub)} 个视频</span>}
+                      </button>
+                    )}
+                    {!collapsed && sec.categories.map(c => {
+                      const r = rows.get(c.name)!
+                      const empty = c.count === 0
+                      return (
+                        <div
+                          key={c.name}
+                          role="row"
+                          className={`pick-row ${r.count > 0 ? 'is-active' : ''} ${r.error ? 'is-error' : ''} ${empty ? 'is-empty' : ''}`}
+                        >
+                          <div className="pick-name" role="cell">
+                            <span className="pick-title-row">
+                              <span className="pick-title" title={c.name}>
+                                {c.name}
+                              </span>
+                              {c.tagIds.map((id, i) => {
+                                const t = tagById.get(id)
+                                if (!t) return null
+                                const on = activeTags.includes(id)
+                                const pill = (
+                                  <button
+                                    key={id}
+                                    className={`tag-pill is-button c-${t.color} ${on ? 'is-hit' : ''}`}
+                                    aria-pressed={on}
+                                    onClick={() => toggleTag(id)}
+                                    title={on ? `不再按「${t.name}」筛选` : `点一下，只显示带「${t.name}」标签的分类`}
+                                  >
+                                    <i className="tag-dot" aria-hidden />
+                                    <span className="tag-pill-name">{t.name}</span>
+                                  </button>
+                                )
+                                // 最后一个标签和“贴标签”的按钮连在一起换行，按钮不会单独掉到下一行。
+                                return i < c.tagIds.length - 1 ? pill : (
+                                  <span key={id} className="tag-tail">
+                                    {pill}
+                                    {addTag(c)}
+                                  </span>
+                                )
+                              })}
+                              {!c.tagIds.length && addTag(c)}
+                            </span>
+                            <span className="pick-meta">
+                              {empty ? '没有视频' : `共 ${num(c.count)} 个视频 · ${bytes(c.bytes)}`}
+                              {r.repeat > 1 && r.files > 0 && ` · ${ruleLine(repeatMode, r.count, r.repeat)}`}
+                            </span>
+                            {r.error && <span className="pick-error">{r.error}</span>}
+                          </div>
+                          <div role="cell" className="ta-c">
+                            <input
+                              ref={el => {
+                                if (el) inputs.current.set(c.name, el)
+                                else inputs.current.delete(c.name)
+                              }}
+                              className="num-input"
+                              inputMode="numeric"
+                              placeholder="0"
+                              disabled={empty || busy}
+                              aria-label={`${c.name} 的数量`}
+                              value={draft[c.name]?.count ?? ''}
+                              onChange={e => setEntry(c.name, 'count', e.target.value)}
+                              onBlur={() => normalize(c.name)}
+                              onKeyDown={e => onKeyDown(e, c.name)}
+                              onFocus={e => e.target.select()}
+                            />
+                          </div>
+                          <div role="cell" className="ta-c">
+                            <label className="rep-input">
+                              <span aria-hidden>×</span>
+                              <input
+                                inputMode="numeric"
+                                placeholder="1"
+                                disabled={empty || busy}
+                                aria-label={`${c.name} 的乘数`}
+                                value={draft[c.name]?.repeat ?? ''}
+                                onChange={e => setEntry(c.name, 'repeat', e.target.value)}
+                                onKeyDown={e => onKeyDown(e, c.name)}
+                                onFocus={e => e.target.select()}
+                              />
+                            </label>
+                          </div>
+                          <div role="cell" className="pick-out pick-col-out ta-r">
+                            {r.files > 0 ? num(r.files) : '—'}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {!collapsed && g && sec.categories.length === 0 && <div className="pick-empty">这个分组还没有分类，可以在素材库里新建或移入分类。</div>}
                   </div>
                 )
               })}
@@ -459,7 +507,7 @@ export function ExtractView() {
           <div className="slip-head">
             <span className="slip-label">本次抽取</span>
             {hasInput && (
-              <button className="slip-clear" onClick={clearAll} disabled={copying} title="清空所有分类填写的数量">
+              <button className="slip-clear" onClick={clearAll} disabled={busy} title="清空所有分类填写的数量">
                 <Eraser size={14} />
                 清空数量
               </button>
@@ -497,7 +545,7 @@ export function ExtractView() {
           <div className="dest">
             <div className="dest-label">
               <span>放入文件夹</span>
-              <button className="link dest-root" onClick={chooseOutput} disabled={copying} title={`目标根目录：${state.outputRoot}（点击更换）`}>
+              <button className="link dest-root" onClick={chooseOutput} disabled={busy} title={`目标根目录：${state.outputRoot}（点击更换）`}>
                 {state.outputRoot.split(/[\\/]/).filter(Boolean).pop()}
               </button>
             </div>
@@ -509,7 +557,7 @@ export function ExtractView() {
                   className="select"
                   value={state.folder}
                   onChange={e => pickFolder(e.target.value)}
-                  disabled={copying || state.destinations.length === 0}
+                  disabled={busy || state.destinations.length === 0}
                   aria-label="放入文件夹"
                 >
                   <option value="" disabled>
@@ -521,7 +569,7 @@ export function ExtractView() {
                     </option>
                   ))}
                 </select>
-                <button className="btn" onClick={newFolder} disabled={copying} title="新建文件夹">
+                <button className="btn" onClick={newFolder} disabled={busy} title="新建文件夹">
                   <FolderPlus size={16} />
                   新建
                 </button>
@@ -529,7 +577,7 @@ export function ExtractView() {
             )}
             {folder && folder.videos > 0 && (
               <label className={`check-row dest-clean ${clean ? 'is-danger' : ''}`}>
-                <input type="checkbox" checked={clean} disabled={copying} onChange={e => setClean(e.target.checked)} />
+                <input type="checkbox" checked={clean} disabled={busy} onChange={e => setClean(e.target.checked)} />
                 复制前清空这里的 {num(folder.videos)} 个旧视频（其他文件保留）
               </label>
             )}

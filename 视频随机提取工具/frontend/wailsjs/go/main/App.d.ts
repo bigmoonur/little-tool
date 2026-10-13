@@ -23,11 +23,19 @@ export function ClearHistory():Promise<void>;
 
 export function CreateCategory(arg1:string):Promise<main.State>;
 
+export function CreateCategoryIn(arg1:string,arg2:string):Promise<main.State>;
+
 export function CreateFolder(arg1:string):Promise<main.State>;
+
+export function CreateGroup(arg1:string):Promise<main.GroupCreated>;
 
 export function CreateTag(arg1:string):Promise<main.TagCreated>;
 
 export function DeactivateLicense():Promise<license.Status>;
+
+export function DeleteCategory(arg1:string,arg2:boolean):Promise<main.CategoryDeleted>;
+
+export function DeleteGroup(arg1:string):Promise<main.State>;
 
 export function DeletePreset(arg1:string):Promise<main.State>;
 
@@ -43,6 +51,10 @@ export function LicenseStatus():Promise<license.Status>;
 
 export function LockStatus():Promise<applock.Status>;
 
+export function MoveCategory(arg1:string,arg2:string,arg3:string):Promise<main.State>;
+
+export function MoveGroup(arg1:string,arg2:string):Promise<main.State>;
+
 export function OpenCategory(arg1:string):Promise<void>;
 
 export function OpenDataFolder():Promise<void>;
@@ -54,6 +66,10 @@ export function OpenVideo(arg1:string,arg2:string):Promise<void>;
 export function Prepare(arg1:Record<string, picker.Pick>,arg2:string,arg3:boolean):Promise<main.PlanSummary>;
 
 export function RefreshLicense():Promise<license.Status>;
+
+export function RenameCategory(arg1:string,arg2:string):Promise<main.State>;
+
+export function RenameGroup(arg1:string,arg2:string):Promise<main.State>;
 
 export function RenamePreset(arg1:string,arg2:string):Promise<main.State>;
 
@@ -70,6 +86,10 @@ export function SaveThumbnail(arg1:string,arg2:string,arg3:string):Promise<void>
 export function SetCategoryTags(arg1:string,arg2:Array<string>):Promise<main.State>;
 
 export function SetFolder(arg1:string):Promise<main.State>;
+
+export function SetGroupCollapsed(arg1:string,arg2:boolean):Promise<main.State>;
+
+export function SetGroupColor(arg1:string,arg2:string):Promise<main.State>;
 
 export function SetLibraryView(arg1:string):Promise<picker.Settings>;
 

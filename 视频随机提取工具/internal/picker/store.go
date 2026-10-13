@@ -14,18 +14,20 @@ const MaxHistory = 50
 
 // Settings 是 settings.json 的内容。
 type Settings struct {
-	MaterialRoot  string         `json:"materialRoot"`
-	OutputRoot    string         `json:"outputRoot"`
-	Folder        string         `json:"folder"`
-	AlwaysOnTop   bool           `json:"alwaysOnTop"`
-	OpenAfter     bool           `json:"openAfter"` // 复制完成后打开目标文件夹
-	Theme         string         `json:"theme"`     // system | light | dark
-	RememberDraft bool           `json:"rememberDraft"`
-	Thumbnails    bool           `json:"thumbnails"`  // 缓存视频缩略图；默认开启
-	LibraryView   string         `json:"libraryView"` // 素材库的显示方式：list | grid
-	Draft         map[string]int `json:"draft"`
-	DraftRepeat   map[string]int `json:"draftRepeat"`
-	Mode          string         `json:"mode"`
+	MaterialRoot     string         `json:"materialRoot"`
+	OutputRoot       string         `json:"outputRoot"`
+	Folder           string         `json:"folder"`
+	AlwaysOnTop      bool           `json:"alwaysOnTop"`
+	AfterCopy        string         `json:"afterCopy"`
+	DeleteWithVideos bool           `json:"deleteWithVideos"`
+	OpenAfter        bool           `json:"openAfter"` // 复制完成后打开目标文件夹
+	Theme            string         `json:"theme"`     // system | light | dark
+	RememberDraft    bool           `json:"rememberDraft"`
+	Thumbnails       bool           `json:"thumbnails"`  // 缓存视频缩略图；默认开启
+	LibraryView      string         `json:"libraryView"` // 素材库的显示方式：list | grid
+	Draft            map[string]int `json:"draft"`
+	DraftRepeat      map[string]int `json:"draftRepeat"`
+	Mode             string         `json:"mode"`
 }
 
 // HistoryEntry 是一次完成的复制。
@@ -56,6 +58,7 @@ type Store struct {
 	window   *WindowState
 	tags     tagData
 	presets  []Preset
+	layout   layoutData
 }
 
 func OpenStore(dir string) (*Store, error) {
@@ -71,6 +74,7 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	normalizeDraft(&s.settings)
 	normalizeLibraryView(&s.settings)
+	normalizeAfterCopy(&s.settings)
 	switch s.settings.Theme {
 	case "system", "light", "dark":
 	default:
@@ -81,6 +85,7 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	s.loadTags()
 	s.loadPresets()
+	s.loadLayout()
 	return s, nil
 }
 
@@ -140,12 +145,21 @@ func normalizeLibraryView(st *Settings) {
 	}
 }
 
+func normalizeAfterCopy(st *Settings) {
+	switch st.AfterCopy {
+	case "stay", "minimize", "quit":
+	default:
+		st.AfterCopy = "stay"
+	}
+}
+
 // Update 修改设置并保存。
 func (s *Store) Update(fn func(*Settings)) Settings {
 	s.mu.Lock()
 	fn(&s.settings)
 	normalizeDraft(&s.settings)
 	normalizeLibraryView(&s.settings)
+	normalizeAfterCopy(&s.settings)
 	_ = writeJSON(filepath.Join(s.dir, "settings.json"), s.settings)
 	s.mu.Unlock()
 	return s.Settings()

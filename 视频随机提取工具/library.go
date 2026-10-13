@@ -86,14 +86,7 @@ func (a *App) scheduleThumbnailPrune() {
 
 // CreateCategory 创建后返回刷新过的分类列表。
 func (a *App) CreateCategory(name string) (State, error) {
-	if err := a.requireLicense(); err != nil {
-		return a.State(), err
-	}
-	if err := a.idle(); err != nil {
-		return a.State(), err
-	}
-	err := picker.CreateCategory(a.store.Settings().MaterialRoot, name)
-	return a.State(), err
+	return a.CreateCategoryIn(name, "")
 }
 
 // ChooseVideos 取消时仍返回空列表，界面可以直接读取长度。

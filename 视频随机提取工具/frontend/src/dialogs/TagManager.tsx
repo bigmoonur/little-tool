@@ -13,13 +13,14 @@ const COLOR_NAMES: Record<string, string> = {
 
 /** 输入名称直接新建标签；重名等错误显示在输入框下面。compact 用在小面板里。 */
 export function NewTag({ onCreated, compact = false }: { onCreated?: (id: string) => void; compact?: boolean }) {
-  const { setState } = useApp()
+  const { setState, copy, adding } = useApp()
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const disabled = busy || copy.phase === 'copying' || !!adding
 
   const create = async () => {
-    if (busy) return
+    if (disabled) return
     if (!name.trim()) return setError('请先填写标签名称')
     setBusy(true)
     try {
@@ -40,6 +41,7 @@ export function NewTag({ onCreated, compact = false }: { onCreated?: (id: string
         <input
           className={`input ${error ? 'is-invalid' : ''}`}
           value={name}
+          disabled={disabled}
           maxLength={40}
           placeholder={compact ? '新标签的名称' : '新标签的名称，例如：开场、常用'}
           aria-label="新标签的名称"
@@ -54,7 +56,7 @@ export function NewTag({ onCreated, compact = false }: { onCreated?: (id: string
             }
           }}
         />
-        <button className="btn" onClick={create} disabled={busy}>
+        <button className="btn" onClick={create} disabled={disabled}>
           <Plus size={16} />
           {busy ? '正在新建…' : compact ? '新建' : '新建标签'}
         </button>
@@ -70,8 +72,9 @@ export function NewTag({ onCreated, compact = false }: { onCreated?: (id: string
 
 /** 全部标签：新建、改名、换颜色、删除。标签贴在分类上，在抽取页的分类名称旁边贴。 */
 export function TagManager({ onClose }: { onClose: () => void }) {
-  const { state, setState, prompt, confirm, run } = useApp()
+  const { state, setState, prompt, confirm, run, copy, adding } = useApp()
   const [busy, setBusy] = useState('')
+  const disabled = !!busy || copy.phase === 'copying' || !!adding
   const [coloring, setColoring] = useState<{ tag: Tag; anchor: Anchor } | null>(null)
   const used = (id: string) => state.categories.filter(c => c.tagIds.includes(id)).length
 
@@ -130,7 +133,7 @@ export function TagManager({ onClose }: { onClose: () => void }) {
                   <button
                     className={`swatch tag-color c-${t.color}`}
                     onClick={e => setColoring({ tag: t, anchor: anchorOf(e.currentTarget) })}
-                    disabled={!!busy}
+                    disabled={disabled}
                     aria-label={`标签 ${t.name} 的颜色：${COLOR_NAMES[t.color]}，点一下更换`}
                     title="更换颜色"
                   />
@@ -138,11 +141,11 @@ export function TagManager({ onClose }: { onClose: () => void }) {
                     <b title={t.name}>{t.name}</b>
                     <span className="dim">{n > 0 ? `贴在 ${num(n)} 个分类上` : '还没有分类使用'}</span>
                   </div>
-                  <button className="btn btn-sm" onClick={() => rename(t)} disabled={!!busy} aria-label={`修改标签 ${t.name} 的名称`}>
+                  <button className="btn btn-sm" onClick={() => rename(t)} disabled={disabled} aria-label={`修改标签 ${t.name} 的名称`}>
                     <Pencil size={14} />
                     改名
                   </button>
-                  <button className="btn btn-sm is-danger" onClick={() => remove(t)} disabled={!!busy} aria-label={`删除标签 ${t.name}`}>
+                  <button className="btn btn-sm is-danger" onClick={() => remove(t)} disabled={disabled} aria-label={`删除标签 ${t.name}`}>
                     <Trash2 size={14} />
                     删除
                   </button>
@@ -162,6 +165,7 @@ export function TagManager({ onClose }: { onClose: () => void }) {
                 className={`swatch c-${c} ${coloring.tag.color === c ? 'is-on' : ''}`}
                 title={COLOR_NAMES[c]}
                 aria-label={`颜色：${COLOR_NAMES[c]}`}
+                disabled={disabled}
                 onClick={() => {
                   const id = coloring.tag.id
                   setColoring(null)

@@ -2,7 +2,7 @@
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
 import type {
-  Done, HistoryEntry, ImportDone, InitInfo, LibraryMode, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme,
+  AfterCopy, Done, HistoryEntry, ImportDone, InitInfo, LibraryMode, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme,
   VideoFile,
 } from './types'
 
@@ -31,7 +31,7 @@ export const api = {
   history: () => call<HistoryEntry[]>('History'),
   clearHistory: () => call<void>('ClearHistory'),
 
-  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; theme: Theme; rememberDraft: boolean; thumbnails: boolean }) =>
+  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; afterCopy: AfterCopy; theme: Theme; rememberDraft: boolean; thumbnails: boolean }) =>
     call<Settings>('UpdateSettings', s),
   setLibraryView: (mode: LibraryMode) => call<Settings>('SetLibraryView', mode),
   saveDraft: (counts: Record<string, number>, repeats: Record<string, number>, mode: RepeatMode) => call<void>('SaveDraft', counts, repeats, mode),
@@ -48,6 +48,16 @@ export const api = {
   /** 把界面生成的缩略图交给后端缓存；data 为空表示这个视频生成不了。 */
   saveThumbnail: (category: string, name: string, data: string) => call<void>('SaveThumbnail', category, name, data),
   createCategory: (name: string) => call<State>('CreateCategory', name),
+  createCategoryIn: (name: string, groupId: string) => call<State>('CreateCategoryIn', name, groupId),
+  renameCategory: (oldName: string, newName: string) => call<State>('RenameCategory', oldName, newName),
+  deleteCategory: (name: string, withVideos: boolean) => call<{ state: State; removed: number; kept: boolean }>('DeleteCategory', name, withVideos),
+  moveCategory: (name: string, groupId: string, beforeName: string) => call<State>('MoveCategory', name, groupId, beforeName),
+  createGroup: (name: string) => call<{ state: State; id: string }>('CreateGroup', name),
+  renameGroup: (id: string, name: string) => call<State>('RenameGroup', id, name),
+  setGroupColor: (id: string, color: string) => call<State>('SetGroupColor', id, color),
+  setGroupCollapsed: (id: string, collapsed: boolean) => call<State>('SetGroupCollapsed', id, collapsed),
+  deleteGroup: (id: string) => call<State>('DeleteGroup', id),
+  moveGroup: (id: string, beforeId: string) => call<State>('MoveGroup', id, beforeId),
   chooseVideos: () => call<string[]>('ChooseVideos'),
   addVideos: (category: string, paths: string[]) => call<void>('AddVideos', category, paths),
 

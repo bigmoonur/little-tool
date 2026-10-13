@@ -38,10 +38,11 @@ type video struct {
 
 // Category 是素材根目录下的一个子文件夹。
 type Category struct {
-	Name   string   `json:"name"`
-	Count  int      `json:"count"`
-	Bytes  int64    `json:"bytes"`
-	TagIDs []string `json:"tagIds"`
+	Name    string   `json:"name"`
+	GroupID string   `json:"groupId"`
+	Count   int      `json:"count"`
+	Bytes   int64    `json:"bytes"`
+	TagIDs  []string `json:"tagIds"`
 }
 
 // Destination 是目标根目录下可以放入视频的子文件夹。
@@ -124,6 +125,10 @@ func checkRoot(root, what string) error {
 }
 
 func scan(root string) ([]Category, map[string][]video, error) {
+	return scanFiltered(root, nil)
+}
+
+func scanFiltered(root string, hidden map[string]bool) ([]Category, map[string][]video, error) {
 	if err := checkRoot(root, "素材根目录"); err != nil {
 		return nil, nil, err
 	}
@@ -134,6 +139,9 @@ func scan(root string) ([]Category, map[string][]video, error) {
 	cats := make([]Category, 0, len(dirs))
 	files := make(map[string][]video, len(dirs))
 	for _, name := range dirs {
+		if hidden[name] {
+			continue
+		}
 		vs, err := listVideos(filepath.Join(root, name))
 		if err != nil {
 			return nil, nil, userErr("无法读取分类「%s」：%v", name, err)

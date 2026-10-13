@@ -38,8 +38,16 @@ export function CreateCategory(arg1) {
   return window['go']['main']['App']['CreateCategory'](arg1);
 }
 
+export function CreateCategoryIn(arg1, arg2) {
+  return window['go']['main']['App']['CreateCategoryIn'](arg1, arg2);
+}
+
 export function CreateFolder(arg1) {
   return window['go']['main']['App']['CreateFolder'](arg1);
+}
+
+export function CreateGroup(arg1) {
+  return window['go']['main']['App']['CreateGroup'](arg1);
 }
 
 export function CreateTag(arg1) {
@@ -48,6 +56,14 @@ export function CreateTag(arg1) {
 
 export function DeactivateLicense() {
   return window['go']['main']['App']['DeactivateLicense']();
+}
+
+export function DeleteCategory(arg1, arg2) {
+  return window['go']['main']['App']['DeleteCategory'](arg1, arg2);
+}
+
+export function DeleteGroup(arg1) {
+  return window['go']['main']['App']['DeleteGroup'](arg1);
 }
 
 export function DeletePreset(arg1) {
@@ -78,6 +94,14 @@ export function LockStatus() {
   return window['go']['main']['App']['LockStatus']();
 }
 
+export function MoveCategory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['MoveCategory'](arg1, arg2, arg3);
+}
+
+export function MoveGroup(arg1, arg2) {
+  return window['go']['main']['App']['MoveGroup'](arg1, arg2);
+}
+
 export function OpenCategory(arg1) {
   return window['go']['main']['App']['OpenCategory'](arg1);
 }
@@ -100,6 +124,14 @@ export function Prepare(arg1, arg2, arg3) {
 
 export function RefreshLicense() {
   return window['go']['main']['App']['RefreshLicense']();
+}
+
+export function RenameCategory(arg1, arg2) {
+  return window['go']['main']['App']['RenameCategory'](arg1, arg2);
+}
+
+export function RenameGroup(arg1, arg2) {
+  return window['go']['main']['App']['RenameGroup'](arg1, arg2);
 }
 
 export function RenamePreset(arg1, arg2) {
@@ -132,6 +164,14 @@ export function SetCategoryTags(arg1, arg2) {
 
 export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
+}
+
+export function SetGroupCollapsed(arg1, arg2) {
+  return window['go']['main']['App']['SetGroupCollapsed'](arg1, arg2);
+}
+
+export function SetGroupColor(arg1, arg2) {
+  return window['go']['main']['App']['SetGroupColor'](arg1, arg2);
 }
 
 export function SetLibraryView(arg1) {

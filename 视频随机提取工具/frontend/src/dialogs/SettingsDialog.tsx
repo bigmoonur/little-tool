@@ -1,7 +1,7 @@
 import { FolderOpen, KeyRound, RefreshCw } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
-import type { Settings, Theme } from '../types'
+import type { AfterCopy, Settings, Theme } from '../types'
 import { Modal } from '../ui/Modal'
 import { LockDialog } from './LockDialog'
 import { day } from '../lib/format'
@@ -119,6 +119,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <section>
           <h3>抽取与复制</h3>
+          <div className="setting-row">
+            <span>复制完成后</span>
+            <Segmented<AfterCopy>
+              label="复制完成后"
+              value={settings.afterCopy}
+              onChange={v => update({ afterCopy: v })}
+              options={[
+                ['stay', '留在程序'],
+                ['minimize', '最小化'],
+                ['quit', '退出程序'],
+              ]}
+            />
+          </div>
           <label className="check-row">
             <input type="checkbox" checked={settings.openAfter} onChange={e => update({ openAfter: e.target.checked })} />
             复制完成后自动打开目标文件夹

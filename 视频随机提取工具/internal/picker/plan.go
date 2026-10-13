@@ -95,6 +95,10 @@ func clonePicks(picks map[string]Pick) map[string]Pick {
 
 // Prepare 按数量和乘数抽取；名称归属源文件，额外副本使用不冲突的后缀或轮次序号。
 func Prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mode string, clean bool, r *rand.Rand) (Plan, error) {
+	return prepare(materialRoot, outputRoot, folder, picks, mode, clean, r, nil)
+}
+
+func prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mode string, clean bool, r *rand.Rand, hidden map[string]bool) (Plan, error) {
 	mode, err := pickMode(mode)
 	if err != nil {
 		return Plan{}, err
@@ -106,7 +110,7 @@ func Prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mod
 	if err != nil {
 		return Plan{}, err
 	}
-	cats, files, err := scan(materialRoot)
+	cats, files, err := scanFiltered(materialRoot, hidden)
 	if err != nil {
 		return Plan{}, err
 	}

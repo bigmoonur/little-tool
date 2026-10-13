@@ -17,16 +17,20 @@ internal/picker/
   copy.go                  暂存复制 → 检查 → 一次性放入；失败或取消时回滚
   disk_*.go                剩余空间、隐藏临时文件夹（按平台）
   store.go                 settings.json、history.json（含每次用的参数）、presets.json、window.json
+  layout.go                layout.json：分组、分类顺序与隐藏状态，素材盘离线时仍保留
+  categories.go            分类恢复、文件夹重命名与关联搬迁、删除视频或仅移除分类
   tags.go                  标签（名称、颜色）和每个分类贴的标签，保存在 tags.json
   thumbs.go                缩略图缓存：缓存名、保存、清理已经消失的视频的缩略图
   import.go                往分类里添加视频：只复制、不覆盖，失败或取消时撤销
 library.go                 素材库的方法：缩略图、新建分类、添加视频
+app_layout.go              分组、分类整理接口；复制成功后的窗口动作
 media.go                   给界面提供缩略图和生成缩略图用的视频数据（每次最多 1 MiB，见下面“缩略图”）
   picker_test.go
 frontend/src/
   App.tsx                  外壳：顶栏、复制状态、自动刷新、关闭确认
-  views/                   首次使用、抽取页、素材库、记录页
-  dialogs/                 设置、方案管理、标签管理和贴标签
+  views/                   首次使用、抽取页、素材库（LibrarySidebar 分组树）、记录页
+  dialogs/                 设置、方案管理、标签管理和贴标签、DeleteCategoryDialog 删除分类确认
+  lib/reorder.ts           分组和分类拖动排序、跨分组移动
   ui/                      弹窗、小面板、提示条、标签、回车键图标、标志
 ../shared/license/        两款工具共用的 Keygen 授权和安全回归测试
 license.go                 授权接口与后端操作检查

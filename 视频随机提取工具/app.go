@@ -122,7 +122,7 @@ type InitInfo struct {
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive, Thumbnails: true, LibraryView: "list"}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive, Thumbnails: true, LibraryView: "list", AfterCopy: "stay"}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
 	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS, Lock: a.LockStatus()}, nil
 }
@@ -133,6 +133,7 @@ type State struct {
 	OutputRoot    string               `json:"outputRoot"`
 	Folder        string               `json:"folder"`
 	Categories    []picker.Category    `json:"categories"`
+	Groups        []picker.Group       `json:"groups"`
 	Tags          []picker.Tag         `json:"tags"`
 	Presets       []picker.Preset      `json:"presets"`
 	Destinations  []picker.Destination `json:"destinations"`
@@ -144,19 +145,16 @@ type State struct {
 
 func (a *App) State() State {
 	if a.store == nil {
-		return State{Categories: []picker.Category{}, Tags: []picker.Tag{}, Presets: []picker.Preset{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		return State{Categories: []picker.Category{}, Groups: []picker.Group{}, Tags: []picker.Tag{}, Presets: []picker.Preset{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
 	}
 	s := a.store.Settings()
 	st := State{MaterialRoot: s.MaterialRoot, OutputRoot: s.OutputRoot, Folder: s.Folder,
-		Categories: []picker.Category{}, Tags: a.store.Tags(), Presets: a.store.Presets(), Destinations: []picker.Destination{}, Leftovers: []string{}}
+		Categories: []picker.Category{}, Groups: a.store.Groups(), Tags: a.store.Tags(), Presets: a.store.Presets(), Destinations: []picker.Destination{}, Leftovers: []string{}}
 	if s.MaterialRoot != "" {
-		if cats, err := picker.ScanCategories(s.MaterialRoot); err != nil {
+		if cats, err := a.store.ScanCategories(s.MaterialRoot); err != nil {
 			st.MaterialError = err.Error()
 		} else {
-			for i := range cats {
-				cats[i].TagIDs = a.store.CategoryTags(cats[i].Name)
-			}
-			st.Categories = cats
+			st.Categories = a.store.ArrangeCategories(cats)
 			a.scheduleThumbnailPrune()
 		}
 	}
@@ -380,18 +378,18 @@ func (a *App) Prepare(picks map[string]picker.Pick, mode string, clean bool) (Pl
 	if err := a.requireLicense(); err != nil {
 		return PlanSummary{}, err
 	}
-	if err := a.idle(); err != nil {
-		return PlanSummary{}, err
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.busy {
+		return PlanSummary{}, userErr("正在复制，请等待完成或取消后再操作")
 	}
 	s := a.store.Settings()
-	p, err := picker.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, picks, mode, clean, a.rng)
+	p, err := a.store.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, picks, mode, clean, a.rng)
 	if err != nil {
 		return PlanSummary{}, err
 	}
 	id := time.Now().Format("150405.000000")
-	a.mu.Lock()
 	a.pending, a.pendingID = &p, id
-	a.mu.Unlock()
 	return PlanSummary{ID: id, Count: len(p.Items), Bytes: p.Bytes, Old: len(p.Old), Destination: p.Destination, Folder: p.Folder, Items: p.Items}, nil
 }
 
@@ -453,9 +451,7 @@ func (a *App) Start(id string) error {
 			return
 		}
 		runtime.EventsEmit(a.ctx, "copy-done", done)
-		if done.OK && a.store.Settings().OpenAfter {
-			_ = openPath(res.Destination)
-		}
+		a.afterSuccessfulCopy(done.OK, res.Destination, openPath, func() { runtime.WindowMinimise(a.ctx) }, func() { runtime.Quit(a.ctx) })
 	}()
 	return nil
 }
@@ -484,6 +480,7 @@ func (a *App) ClearHistory() error {
 type UISettings struct {
 	AlwaysOnTop   bool   `json:"alwaysOnTop"`
 	OpenAfter     bool   `json:"openAfter"`
+	AfterCopy     string `json:"afterCopy"`
 	Theme         string `json:"theme"`
 	RememberDraft bool   `json:"rememberDraft"`
 	Thumbnails    bool   `json:"thumbnails"`
@@ -495,6 +492,7 @@ func (a *App) UpdateSettings(u UISettings) picker.Settings {
 	s := a.store.Update(func(st *picker.Settings) {
 		st.AlwaysOnTop, st.OpenAfter, st.RememberDraft = u.AlwaysOnTop, u.OpenAfter, u.RememberDraft
 		st.Thumbnails = u.Thumbnails
+		st.AfterCopy = u.AfterCopy
 		switch u.Theme {
 		case "system", "light", "dark":
 			st.Theme = u.Theme

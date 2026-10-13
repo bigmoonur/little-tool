@@ -53,7 +53,7 @@ export function TagPopover({ anchor, title, checked, locked = false, onToggle, o
       )}
       <NewTag compact onCreated={id => onToggle(id, true)} />
       {state.tags.length > 0 && (
-        <button className="link pop-link" onClick={onManage}>
+        <button className="link pop-link" disabled={locked} onClick={onManage}>
           改名、换颜色或删除标签…
         </button>
       )}

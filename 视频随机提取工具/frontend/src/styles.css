@@ -577,6 +577,7 @@ kbd {
   border-top: 1px solid var(--line);
 }
 .pick-group .chev {
+  flex: none;
   color: var(--ink-3);
   transition: transform 0.15s;
 }
@@ -594,13 +595,21 @@ kbd {
   flex: none;
 }
 .pick-group-name {
+  min-width: 0;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pick-group-meta {
+  flex: none;
+  white-space: nowrap;
   color: var(--ink-3);
   font-size: 12.5px;
 }
 .pick-group-sub {
+  flex: none;
+  white-space: nowrap;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--gold-ink);
@@ -1332,6 +1341,204 @@ kbd {
   padding: 12px 18px;
   color: var(--ink-3);
 }
+.tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+.tree-section + .tree-section {
+  margin-top: 6px;
+}
+.tree-group {
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-s);
+  position: relative;
+}
+.tree-group-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.tree-group-toggle:disabled {
+  cursor: default;
+}
+.tree-group .chev {
+  color: var(--ink-3);
+  transition: transform 0.15s;
+  flex: none;
+}
+.tree-group .chev.is-collapsed {
+  transform: rotate(-90deg);
+}
+.chev-space {
+  width: 14px;
+  flex: none;
+}
+.tree-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-count {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding-left: 8px;
+}
+.tree-more {
+  opacity: 0;
+}
+.tree-group:hover .tree-more,
+.tree-item:hover .tree-more,
+.tree-more:focus-visible {
+  opacity: 1;
+}
+.tree-group:hover .tree-count,
+.tree-item:hover .tree-count {
+  visibility: hidden;
+}
+.tree-group .tree-more,
+.tree-item .tree-more {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tree-lists {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+}
+.tree-item {
+  position: relative;
+  border-radius: var(--r-s);
+}
+.tree-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+.tree-item-btn::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--gc);
+  opacity: 0.6;
+}
+.tree-item-btn:hover {
+  background: var(--surface-2);
+}
+.tree-item.is-selected .tree-item-btn {
+  background: var(--select);
+  color: var(--select-ink);
+  font-weight: 600;
+}
+.tree-item.is-selected .tree-item-btn::before {
+  opacity: 1;
+}
+.tree-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-tags {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+  flex: none;
+}
+.tree-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px 8px;
+  border-radius: var(--r-s);
+  border: 1px dashed transparent;
+}
+.tree-empty-actions {
+  display: flex;
+  gap: 16px;
+}
+.tree-empty-actions .link {
+  min-height: 28px;
+}
+.tree-none {
+  padding: 16px 12px;
+  color: var(--ink-3);
+}
+
+/* 拖动排序的落点提示 */
+.drop-before::after,
+.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--focus);
+  pointer-events: none;
+}
+.drop-before::after {
+  top: -1px;
+}
+.drop-after::after {
+  bottom: -1px;
+}
+.drop-into {
+  background: var(--select);
+  outline: 2px dashed var(--focus);
+  outline-offset: -2px;
+}
+
+/* 没有分组时分类与查找框对齐。 */
+.tree-lists.is-flat {
+  padding-left: 0;
+}
+.tree-item.is-empty:not(.is-selected) .tree-item-name {
+  color: var(--ink-3);
+}
+.tree-group-name,
+.tree-item-name {
+  flex: 1;
+  min-width: 0;
+}
+.tree-tags {
+  margin-left: 0;
+}
+.tree-count {
+  font-size: 12.5px;
+}
+.delete-category-note {
+  margin: 14px 0 0;
+}
+
 .lib-side-foot {
   display: flex;
   flex-direction: column;
@@ -3322,3 +3529,12 @@ kbd {
 .license-overlay { display: flex; flex-direction: column; z-index: 200; background: var(--bg); }
 .license-overlay .gate { flex: 1; height: auto; min-height: 0; overflow-y: auto; }
 .license-copy-notice { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px; flex: none; }
+
+/* 滚动条平时不显示，鼠标移到可以滚动的区域上才出现。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--line-strong) transparent;
+}

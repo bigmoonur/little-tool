@@ -1,14 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowDown, ArrowUp, Film, FolderOpen, FolderPlus, LayoutGrid, List, Play, Plus, RefreshCw, Search, Tags, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Film, FolderOpen, FolderPlus, LayoutGrid, List, Play, Plus, RefreshCw, Search, X } from 'lucide-react'
 import { api, errorText } from '../api'
 import { useApp } from '../ctx'
 import { useCategoryTagging } from '../dialogs/CategoryTagging'
-import { bytes, num, shortPath, when } from '../lib/format'
+import { bytes, num, when } from '../lib/format'
 import { validateFolderName } from '../lib/names'
 import { thumbUrl, useThumb, useVisible, type ThumbState } from '../lib/thumbs'
 import type { Category, LibraryMode, Tag, VideoFile } from '../types'
 import { TagPill } from '../ui/TagPill'
+import { LibrarySidebar } from './LibrarySidebar'
 import { Setup } from './Setup'
 
 /** 一次最多列出这么多个；再多就请用查找缩小范围，免得列表卡顿。 */
@@ -27,10 +28,9 @@ const MODES: { mode: LibraryMode; label: string; icon: React.ReactNode }[] = [
   { mode: 'grid', label: '图标', icon: <LayoutGrid size={15} /> },
 ]
 
-/** 素材库：左边是素材根目录里的分类，右边是选中分类里的视频。可以新建分类、往分类里添加视频、贴标签；不会改动已有的视频。 */
+/** 素材库：左边是素材根目录里的分类，右边是选中分类里的视频。可以新建分类、往分类里添加视频、贴标签、整理分组和分类。 */
 export function LibraryView() {
   const { state, setState, selected, select, run, refresh, prompt, toast, copy, adding } = useApp()
-  const [query, setQuery] = useState('')
   const tagging = useCategoryTagging()
   const tagById = useMemo(() => new Map<string, Tag>(state.tags.map(t => [t.id, t])), [state.tags])
   const current = state.categories.find(c => c.name === selected)
@@ -43,84 +43,30 @@ export function LibraryView() {
 
   if (!state.materialRoot || !state.outputRoot) return <Setup />
 
-  const q = query.trim().toLowerCase()
-  const shown = q ? state.categories.filter(c => c.name.toLowerCase().includes(q)) : state.categories
-
-  const newCategory = async () => {
+  const newCategory = async (groupId = '') => {
+    if (busy) return
     const existing = new Set(state.categories.map(c => c.name.toLowerCase()))
     const name = await prompt({
       title: '新建分类',
       label: '分类名称',
       placeholder: '例如：开场',
       confirmText: '新建',
-      hint: '会在素材根目录里新建一个同名文件夹，之后可以直接往里添加视频。',
+      hint: groupId ? `会放在分组「${state.groups.find(g => g.id === groupId)?.name}」里；同名的隐藏分类会恢复。` : '会在素材根目录里新建同名文件夹；之前移除的同名分类会恢复。',
       validate: v => validateFolderName(v) || (existing.has(v.toLowerCase()) ? '已经有同名分类了，可以直接选择它' : ''),
     })
     if (!name) return
-    const s = await run(api.createCategory(name))
+    const s = await run(api.createCategoryIn(name, groupId))
     if (!s) return
-    setState(s)
-    select(name)
-    setQuery('')
-    toast(`已新建分类「${name}」`, { kind: 'ok' })
+    const g = s.groups.find(g => g.id === groupId)
+    const expanded = g?.collapsed ? await run(api.setGroupCollapsed(groupId, false)) : undefined
+    setState(expanded ?? s)
+    select(s.categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.name ?? name)
+    toast(`已选中分类「${name}」`, { kind: 'ok' })
   }
-
-  const newButton = (
-    <button className="btn btn-ghost" onClick={newCategory} disabled={busy || !!state.materialError}>
-      <FolderPlus size={16} />
-      新建分类
-    </button>
-  )
 
   return (
     <div className="library">
-      <nav className="lib-side" aria-label="分类列表">
-        <div className="lib-search">
-          <Search size={15} className="dim" />
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="查找分类" aria-label="查找分类" />
-          {query && (
-            <button className="icon-btn sm" onClick={() => setQuery('')} aria-label="清除查找">
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <ul className="lib-list">
-          {shown.map(c => (
-            <li key={c.name}>
-              <button className={`lib-item ${c.name === current?.name ? 'is-selected' : ''} ${c.count ? '' : 'is-empty'}`} onClick={() => select(c.name)}>
-                <span className="lib-item-name" title={c.name}>
-                  {c.name}
-                </span>
-                {c.tagIds.length > 0 && (
-                  <span className="lib-item-tags" title={`标签：${c.tagIds.map(id => tagById.get(id)?.name).filter(Boolean).join('、')}`}>
-                    {c.tagIds.map(id => (
-                      <i key={id} className={`tag-dot c-${tagById.get(id)?.color}`} />
-                    ))}
-                  </span>
-                )}
-                <span className="lib-item-count tnum">{num(c.count)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {q && shown.length === 0 && <p className="lib-none">没有名称包含“{query.trim()}”的分类</p>}
-        <div className="lib-side-foot">
-          <div className="lib-root" title={state.materialRoot}>
-            <span className="dim">素材根目录</span>
-            <span className="lib-root-path">{shortPath(state.materialRoot, 30)}</span>
-          </div>
-          {newButton}
-          <button className="btn btn-ghost" onClick={() => run(api.openFolder(state.materialRoot))}>
-            <FolderOpen size={16} />
-            打开素材根目录
-          </button>
-          <button className="btn btn-ghost" onClick={tagging.manage}>
-            <Tags size={16} />
-            管理标签
-            {state.tags.length > 0 && <span className="lib-item-count tnum">{state.tags.length}</span>}
-          </button>
-        </div>
-      </nav>
+      <LibrarySidebar tagging={tagging} newCategory={newCategory} />
       <section className="lib-detail">
         {state.materialError ? (
           <div className="empty-inline is-error">
@@ -137,7 +83,7 @@ export function LibraryView() {
             <h2>素材根目录里还没有分类</h2>
             <p>每个分类是素材根目录里的一个子文件夹。可以在这里新建，也可以直接在资源管理器里建好文件夹，回到这个窗口时会自动刷新。</p>
             <div className="empty-inline-actions">
-              <button className="btn btn-primary" onClick={newCategory} disabled={busy}>
+              <button className="btn btn-primary" onClick={() => newCategory()} disabled={busy}>
                 <FolderPlus size={16} />
                 新建分类
               </button>
@@ -294,6 +240,7 @@ function CategoryDetail({ category, tags, tagging }: {
           <button
             className={`tag-add ${tagging.openName === category.name ? 'is-open' : ''}`}
             aria-haspopup="dialog"
+            disabled={busy}
             title="标签贴在整个分类上，抽取时点标签就能只看带这个标签的分类"
             onClick={e => tagging.open(category, e.currentTarget)}
           >
