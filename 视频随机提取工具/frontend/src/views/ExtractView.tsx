@@ -7,21 +7,13 @@ import { useApp } from '../ctx'
 import { useCategoryTagging } from '../dialogs/CategoryTagging'
 import { PresetManager } from '../dialogs/PresetManager'
 import { bytes, clock, num, shortPath } from '../lib/format'
+import { validateFolderName } from '../lib/names'
 import { draftToPicks, evaluate, modeInfo, picksToDraft, ruleLine, samePicks, splitCombined, usesRule, type RowState } from '../lib/pick'
 import type { Category, Item, Tag } from '../types'
 import { EnterKey } from '../ui/EnterKey'
 import { anchorOf, useMenu, type MenuItem } from '../ui/Menu'
 import { ModeSwitch } from './ModeSwitch'
 import { Setup } from './Setup'
-
-function validateFolderName(name: string) {
-  if (!name.trim()) return '请输入文件夹名称'
-  if (name === '.' || name === '..' || /[ .]$/.test(name)) return '名称不能是 . 或 ..，也不能以空格或句点结尾'
-  if (/[<>:"/\\|?*\x00-\x1f]/.test(name)) return '名称不能包含以下字符：< > : " / \\ | ? *'
-  const stem = name.split('.')[0].trimEnd().toUpperCase()
-  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem)) return '这个名称是 Windows 保留名称，请换一个'
-  return ''
-}
 
 function groupItems(items: Item[]) {
   const map = new Map<string, Item[]>()
@@ -31,7 +23,7 @@ function groupItems(items: Item[]) {
 
 export function ExtractView() {
   const {
-    state, setState, refresh, run, prompt, confirm, toast, copy, startCopy, cancelCopy, clearResult, draft, setDraft, repeatMode, setRepeatMode,
+    state, setState, refresh, run, prompt, confirm, toast, copy, startCopy, cancelCopy, clearResult, draft, setDraft, repeatMode, setRepeatMode, adding,
   } = useApp()
   const [clean, setClean] = useState(false)
   const [tagFilter, setTagFilter] = useState<string[]>([])
@@ -70,7 +62,7 @@ export function ExtractView() {
   const visible = state.categories.filter(shown)
   // 回车依次经过的输入框：看得见的、有视频可抽的分类。
   const order = visible.filter(c => c.count > 0).map(c => c.name)
-  const ready = !!folder && total > 0 && errors.length === 0 && !copying
+  const ready = !!folder && total > 0 && errors.length === 0 && !copying && !adding
 
   // 换了文件夹或文件夹里没有视频时，取消“清空旧视频”。
   useEffect(() => {
@@ -84,6 +76,7 @@ export function ExtractView() {
 
   const start = () => {
     if (copying) return
+    if (adding) return void toast('正在往素材库里添加视频，完成后再抽取', { kind: 'error' })
     if (errors.length) {
       toast(`「${errors[0].name}」：${rows.get(errors[0].name)?.error}`, { kind: 'error' })
       return focusRow(errors[0].name)

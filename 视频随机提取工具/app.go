@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	goruntime "runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"videopicker/internal/picker"
@@ -34,6 +35,10 @@ type App struct {
 	cancel    context.CancelFunc
 	busy      bool
 	quitAfter bool
+
+	thumbMu      sync.Mutex
+	pruneRunning atomic.Bool
+	lastPrune    atomic.Int64
 }
 
 func NewApp(store *picker.Store, lic licenseManager, initErr error) *App {
@@ -46,6 +51,7 @@ func NewApp(store *picker.Store, lic licenseManager, initErr error) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.scheduleThumbnailPrune()
 	if a.lic != nil && !licenseBypass {
 		a.lic.Start(func(st license.Status) { runtime.EventsEmit(ctx, "license-changed", st) })
 	}
@@ -116,7 +122,7 @@ type InitInfo struct {
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive, Thumbnails: true, LibraryView: "list"}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
 	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS, Lock: a.LockStatus()}, nil
 }
@@ -151,6 +157,7 @@ func (a *App) State() State {
 				cats[i].TagIDs = a.store.CategoryTags(cats[i].Name)
 			}
 			st.Categories = cats
+			a.scheduleThumbnailPrune()
 		}
 	}
 	if s.OutputRoot != "" {
@@ -479,18 +486,25 @@ type UISettings struct {
 	OpenAfter     bool   `json:"openAfter"`
 	Theme         string `json:"theme"`
 	RememberDraft bool   `json:"rememberDraft"`
+	Thumbnails    bool   `json:"thumbnails"`
 }
 
 func (a *App) UpdateSettings(u UISettings) picker.Settings {
+	a.thumbMu.Lock()
 	prev := a.store.Settings()
 	s := a.store.Update(func(st *picker.Settings) {
 		st.AlwaysOnTop, st.OpenAfter, st.RememberDraft = u.AlwaysOnTop, u.OpenAfter, u.RememberDraft
+		st.Thumbnails = u.Thumbnails
 		switch u.Theme {
 		case "system", "light", "dark":
 			st.Theme = u.Theme
 		}
 	})
-	if prev.AlwaysOnTop != s.AlwaysOnTop {
+	if prev.Thumbnails && !s.Thumbnails {
+		_ = a.store.ClearThumbs()
+	}
+	a.thumbMu.Unlock()
+	if prev.AlwaysOnTop != s.AlwaysOnTop && a.ctx != nil {
 		runtime.WindowSetAlwaysOnTop(a.ctx, s.AlwaysOnTop)
 	}
 	return s
@@ -532,7 +546,25 @@ func (a *App) OpenDataFolder() error { return openPath(a.store.Dir()) }
 
 // Videos 列出一个分类里的视频，供素材库查看。
 func (a *App) Videos(category string) ([]picker.VideoFile, error) {
-	return picker.ListVideos(a.store.Settings().MaterialRoot, category)
+	if a.store == nil {
+		return []picker.VideoFile{}, errors.New("无法打开数据文件夹")
+	}
+	s := a.store.Settings()
+	var videos []picker.VideoFile
+	var err error
+	if s.Thumbnails {
+		videos, err = picker.ListVideosWithKeys(s.MaterialRoot, category)
+		states := a.store.ThumbStates()
+		for i := range videos {
+			videos[i].Thumb = states[videos[i].Key]
+		}
+	} else {
+		videos, err = picker.ListVideos(s.MaterialRoot, category)
+	}
+	if videos == nil {
+		videos = []picker.VideoFile{}
+	}
+	return videos, err
 }
 
 // OpenCategory 在资源管理器中打开分类的文件夹。

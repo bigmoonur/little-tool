@@ -2,7 +2,8 @@
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
 import type {
-  Done, HistoryEntry, InitInfo, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme, VideoFile,
+  Done, HistoryEntry, ImportDone, InitInfo, LibraryMode, LicenseStatus, LockStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme,
+  VideoFile,
 } from './types'
 
 const go = Go as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
@@ -30,8 +31,9 @@ export const api = {
   history: () => call<HistoryEntry[]>('History'),
   clearHistory: () => call<void>('ClearHistory'),
 
-  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; theme: Theme; rememberDraft: boolean }) =>
+  updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; theme: Theme; rememberDraft: boolean; thumbnails: boolean }) =>
     call<Settings>('UpdateSettings', s),
+  setLibraryView: (mode: LibraryMode) => call<Settings>('SetLibraryView', mode),
   saveDraft: (counts: Record<string, number>, repeats: Record<string, number>, mode: RepeatMode) => call<void>('SaveDraft', counts, repeats, mode),
 
   savePreset: (name: string, picks: Record<string, Pick>, mode: RepeatMode) => call<{ state: State; id: string }>('SavePreset', name, picks, mode),
@@ -43,6 +45,11 @@ export const api = {
   videos: (category: string) => call<VideoFile[]>('Videos', category),
   openCategory: (category: string) => call<void>('OpenCategory', category),
   openVideo: (category: string, name: string) => call<void>('OpenVideo', category, name),
+  /** 把界面生成的缩略图交给后端缓存；data 为空表示这个视频生成不了。 */
+  saveThumbnail: (category: string, name: string, data: string) => call<void>('SaveThumbnail', category, name, data),
+  createCategory: (name: string) => call<State>('CreateCategory', name),
+  chooseVideos: () => call<string[]>('ChooseVideos'),
+  addVideos: (category: string, paths: string[]) => call<void>('AddVideos', category, paths),
 
   lockStatus: () => call<LockStatus>('LockStatus'),
   unlock: (pin: string) => call<{ ok: boolean; status: LockStatus }>('Unlock', pin),
@@ -60,6 +67,8 @@ export const events = {
   onLicenseChanged: (fn: (s: LicenseStatus) => void) => Runtime.EventsOn('license-changed', fn),
   onProgress: (fn: (p: Progress) => void) => Runtime.EventsOn('copy-progress', fn),
   onDone: (fn: (d: Done) => void) => Runtime.EventsOn('copy-done', fn),
+  onImportProgress: (fn: (p: Progress) => void) => Runtime.EventsOn('import-progress', fn),
+  onImportDone: (fn: (d: ImportDone) => void) => Runtime.EventsOn('import-done', fn),
   onCloseWhileBusy: (fn: () => void) => Runtime.EventsOn('close-while-busy', fn),
 }
 

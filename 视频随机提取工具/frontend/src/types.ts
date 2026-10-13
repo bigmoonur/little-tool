@@ -12,7 +12,13 @@ export interface Settings {
   draft: Record<string, number>
   draftRepeat: Record<string, number>
   mode: RepeatMode
+  /** 缓存视频缩略图（默认开启）。关闭后素材库只有列表。 */
+  thumbnails: boolean
+  /** 素材库的显示方式。 */
+  libraryView: LibraryMode
 }
+
+export type LibraryMode = 'list' | 'grid'
 
 /** 乘数规则：连续重复、循环重复，或者分轮重新抽。 */
 export type RepeatMode = 'consecutive' | 'cycle' | 'random'
@@ -79,6 +85,25 @@ export interface VideoFile {
   size: number
   /** 修改时间（毫秒）。 */
   modified: number
+  /** 缩略图的缓存名；没开缩略图时为空。 */
+  key: string
+  /** ready 已有缩略图，none 这个视频生成不了，空字符串是还没生成。 */
+  thumb: '' | 'ready' | 'none'
+}
+
+/** 往分类里添加视频的结果。 */
+export interface ImportResult {
+  category: string
+  added: string[]
+  skipped: { name: string; reason: string }[]
+  bytes: number
+}
+
+export interface ImportDone {
+  ok: boolean
+  cancelled: boolean
+  error: string
+  result: ImportResult
 }
 
 export interface Destination {

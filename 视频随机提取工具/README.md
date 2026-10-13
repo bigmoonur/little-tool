@@ -18,6 +18,10 @@ internal/picker/
   disk_*.go                剩余空间、隐藏临时文件夹（按平台）
   store.go                 settings.json、history.json（含每次用的参数）、presets.json、window.json
   tags.go                  标签（名称、颜色）和每个分类贴的标签，保存在 tags.json
+  thumbs.go                缩略图缓存：缓存名、保存、清理已经消失的视频的缩略图
+  import.go                往分类里添加视频：只复制、不覆盖，失败或取消时撤销
+library.go                 素材库的方法：缩略图、新建分类、添加视频
+media.go                   给界面提供缩略图和生成缩略图用的视频数据（每次最多 1 MiB，见下面“缩略图”）
   picker_test.go
 frontend/src/
   App.tsx                  外壳：顶栏、复制状态、自动刷新、关闭确认
@@ -28,6 +32,14 @@ frontend/src/
 license.go                 授权接口与后端操作检查
 build.sh / build.ps1        相同发布策略：默认无 Garble、production、移除路径和符号
 ```
+
+## 缩略图
+
+程序里没有带视频解码器，缩略图由界面生成：`frontend/src/lib/thumbs.ts` 用一个不显示的 `<video>` 读出一帧，缩小成 JPEG 交给后端，后端存进数据目录的 `thumbs/`。缓存名是素材根目录、分类、文件名、大小、修改时间的哈希，任何一项变了都是新的一张；扫描素材时把已经不存在的视频的缩略图删掉（素材根目录读不到时不删）。
+
+- 视频数据通过 Wails 的 `AssetServer.Handler` 提供（`/media/<分类>/<文件名>`）。Wails 在 Windows 上会把整个响应先读进内存，所以每次只回 1 MiB，由浏览器按 Range 继续取。
+- 不能回 304：WebView2 收到 304 会卡住，所以缩略图不带验证头，靠 `Cache-Control: immutable` 和会变的缓存名。
+- 能不能出图取决于 WebView 能解码什么：H.264 的 mp4 / mov、webm 可以；avi、wmv、flv 和系统不支持的编码不行，后端记一个 `.none` 标记，不会每次重试。
 
 ## 与旧版的对应
 

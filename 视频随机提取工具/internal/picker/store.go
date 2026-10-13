@@ -21,6 +21,8 @@ type Settings struct {
 	OpenAfter     bool           `json:"openAfter"` // 复制完成后打开目标文件夹
 	Theme         string         `json:"theme"`     // system | light | dark
 	RememberDraft bool           `json:"rememberDraft"`
+	Thumbnails    bool           `json:"thumbnails"`  // 缓存视频缩略图；默认开启
+	LibraryView   string         `json:"libraryView"` // 素材库的显示方式：list | grid
 	Draft         map[string]int `json:"draft"`
 	DraftRepeat   map[string]int `json:"draftRepeat"`
 	Mode          string         `json:"mode"`
@@ -47,6 +49,7 @@ type WindowState struct {
 
 type Store struct {
 	mu       sync.Mutex
+	thumbMu  sync.Mutex
 	dir      string
 	settings Settings
 	history  []HistoryEntry
@@ -59,7 +62,7 @@ func OpenStore(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	s := &Store{dir: dir, settings: Settings{Theme: "system", Draft: map[string]int{}}, history: []HistoryEntry{}}
+	s := &Store{dir: dir, settings: Settings{Theme: "system", Thumbnails: true, Draft: map[string]int{}}, history: []HistoryEntry{}}
 	readJSON(filepath.Join(dir, "settings.json"), &s.settings)
 	readJSON(filepath.Join(dir, "history.json"), &s.history)
 	var w WindowState
@@ -67,6 +70,7 @@ func OpenStore(dir string) (*Store, error) {
 		s.window = &w
 	}
 	normalizeDraft(&s.settings)
+	normalizeLibraryView(&s.settings)
 	switch s.settings.Theme {
 	case "system", "light", "dark":
 	default:
@@ -130,11 +134,18 @@ func normalizeDraft(st *Settings) {
 	}
 }
 
+func normalizeLibraryView(st *Settings) {
+	if st.LibraryView != "grid" {
+		st.LibraryView = "list"
+	}
+}
+
 // Update 修改设置并保存。
 func (s *Store) Update(fn func(*Settings)) Settings {
 	s.mu.Lock()
 	fn(&s.settings)
 	normalizeDraft(&s.settings)
+	normalizeLibraryView(&s.settings)
 	_ = writeJSON(filepath.Join(s.dir, "settings.json"), s.settings)
 	s.mu.Unlock()
 	return s.Settings()

@@ -25,3 +25,11 @@ func hide(path string) {
 		}
 	}
 }
+
+func unhide(path string) {
+	if p, err := windows.UTF16PtrFromString(path); err == nil {
+		if attrs, err := windows.GetFileAttributes(p); err == nil {
+			_ = windows.SetFileAttributes(p, attrs&^windows.FILE_ATTRIBUTE_HIDDEN)
+		}
+	}
+}

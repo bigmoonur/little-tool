@@ -71,6 +71,7 @@ function Shell({ init, initialState, license, setLicense }: {
   const [view, setView] = useState<View>('extract')
   const [selected, select] = useState('')
   const [copy, setCopy] = useState<CopyState>({ phase: 'idle' })
+  const [adding, setAdding] = useState<Ctx['adding']>(null)
   const [draft, setDraft] = useState<Draft>(() => {
     const picks: Record<string, Pick> = {}
     for (const [name, count] of Object.entries(init.settings.draft ?? {})) picks[name] = { count, repeat: init.settings.draftRepeat?.[name] ?? 1 }
@@ -86,6 +87,8 @@ function Shell({ init, initialState, license, setLicense }: {
   const dialogs = useDialogs()
   const copyRef = useRef(copy)
   copyRef.current = copy
+  const addingRef = useRef(adding)
+  addingRef.current = adding
 
   const run = useCallback(
     async <T,>(p: Promise<T>): Promise<T | undefined> => {
@@ -124,7 +127,7 @@ function Shell({ init, initialState, license, setLicense }: {
 
   const startCopy = async (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => {
     if (license.state !== 'active') return
-    if (copyRef.current.phase === 'copying') return
+    if (copyRef.current.phase === 'copying' || addingRef.current) return
     const plan = await run(api.prepare(picks, mode, clean))
     if (!plan) return refresh()
     if (plan.old > 0) {
@@ -151,6 +154,41 @@ function Shell({ init, initialState, license, setLicense }: {
     }
   }
 
+  // 在素材库里添加视频：先选文件，再复制进分类。复制期间和抽取互斥。
+  const addVideos = async (category: string) => {
+    if (license.state !== 'active') return
+    if (copyRef.current.phase === 'copying' || addingRef.current) return
+    const paths = await run(api.chooseVideos())
+    if (!paths?.length) return
+    setAdding({ category })
+    try {
+      await api.addVideos(category, paths)
+    } catch (e) {
+      toast(errorText(e), { kind: 'error' })
+      setAdding(null)
+    }
+  }
+
+  useEffect(() => {
+    const offProgress = events.onImportProgress(p => setAdding(a => (a ? { ...a, progress: p } : a)))
+    const offDone = events.onImportDone(d => {
+      setAdding(null)
+      refresh()
+      if (d.cancelled) return void toast(d.error)
+      if (!d.ok) return void toast(d.error, { kind: 'error', duration: 10000 })
+      const { added, skipped, category } = d.result
+      // 跳过的文件写出前几个和原因，免得用户以为都加进去了。
+      const why = skipped.slice(0, 3).map(x => `${x.name}（${x.reason}）`).join('、') + (skipped.length > 3 ? ` 等 ${num(skipped.length)} 个` : '')
+      if (!added.length) return void toast(`没有添加视频：${why}`, { kind: 'error', duration: 10000 })
+      if (skipped.length) return void toast(`已添加 ${num(added.length)} 个视频到「${category}」，跳过 ${num(skipped.length)} 个：${why}`, { duration: 10000 })
+      toast(`已添加 ${num(added.length)} 个视频到「${category}」`, { kind: 'ok' })
+    })
+    return () => {
+      offProgress()
+      offDone()
+    }
+  }, [])
+
   // 复制进度与结果
   useEffect(() => {
     const offProgress = events.onProgress(p => {
@@ -169,12 +207,11 @@ function Shell({ init, initialState, license, setLicense }: {
       }
     })
     const offClose = events.onCloseWhileBusy(async () => {
-      const ok = await dialogs.confirm({
-        title: '正在复制，取消并退出？',
-        message: '会停止复制，把目标文件夹恢复原样后再退出。',
-        confirmText: '取消复制并退出',
-        danger: true,
-      })
+      const ok = await dialogs.confirm(
+        addingRef.current
+          ? { title: '正在添加视频，取消并退出？', message: '会停止添加，这次已经放进分类的视频也会撤掉，原文件不受影响。', confirmText: '取消添加并退出', danger: true }
+          : { title: '正在复制，取消并退出？', message: '会停止复制，把目标文件夹恢复原样后再退出。', confirmText: '取消复制并退出', danger: true },
+      )
       if (ok) api.cancelAndQuit()
     })
     return () => {
@@ -187,7 +224,7 @@ function Shell({ init, initialState, license, setLicense }: {
   // 回到窗口时自动刷新：在资源管理器里增减视频后不用手动刷新。
   useEffect(() => {
     const onFocus = () => {
-      if (copyRef.current.phase !== 'copying') refresh()
+      if (copyRef.current.phase !== 'copying' && !addingRef.current) refresh()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -256,6 +293,8 @@ function Shell({ init, initialState, license, setLicense }: {
     setRepeatMode,
     startCopy,
     cancelCopy: () => api.cancel(),
+    adding,
+    addVideos,
     clearResult: () => setCopy({ phase: 'idle' }),
     license,
     setLicense,
@@ -288,6 +327,11 @@ function Shell({ init, initialState, license, setLicense }: {
             ))}
           </nav>
           <div className="topbar-right">
+            {adding && view !== 'library' && (
+              <button className="btn btn-ghost copying-chip" onClick={() => setView('library')}>
+                正在添加视频 {adding.progress ? `${Math.floor((adding.progress.bytesDone / Math.max(1, adding.progress.bytesTotal)) * 100)}%` : ''}
+              </button>
+            )}
             {copy.phase === 'copying' && view !== 'extract' && (
               <button className="btn btn-ghost copying-chip" onClick={() => setView('extract')}>
                 正在复制 {copy.progress ? `${Math.floor((copy.progress.bytesDone / Math.max(1, copy.progress.bytesTotal)) * 100)}%` : ''}

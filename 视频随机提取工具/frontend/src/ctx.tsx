@@ -39,6 +39,10 @@ export interface Ctx {
   startCopy: (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => Promise<void>
   cancelCopy: () => void
   clearResult: () => void
+  /** 正在往哪个分类里添加视频；没有在添加时是 null。 */
+  adding: { category: string; progress?: Progress } | null
+  /** 选择视频文件并复制进这个分类。 */
+  addVideos: (category: string) => Promise<void>
   license: LicenseStatus
   setLicense: (s: LicenseStatus) => void
   /** 锁屏密码的状态；设置里开关或修改后更新。 */

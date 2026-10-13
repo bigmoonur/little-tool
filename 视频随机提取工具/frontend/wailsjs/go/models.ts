@@ -286,6 +286,7 @@ export namespace main {
 	    openAfter: boolean;
 	    theme: string;
 	    rememberDraft: boolean;
+	    thumbnails: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new UISettings(source);
@@ -297,6 +298,7 @@ export namespace main {
 	        this.openAfter = source["openAfter"];
 	        this.theme = source["theme"];
 	        this.rememberDraft = source["rememberDraft"];
+	        this.thumbnails = source["thumbnails"];
 	    }
 	}
 
@@ -460,6 +462,8 @@ export namespace picker {
 	    openAfter: boolean;
 	    theme: string;
 	    rememberDraft: boolean;
+	    thumbnails: boolean;
+	    libraryView: string;
 	    draft: Record<string, number>;
 	    draftRepeat: Record<string, number>;
 	    mode: string;
@@ -477,6 +481,8 @@ export namespace picker {
 	        this.openAfter = source["openAfter"];
 	        this.theme = source["theme"];
 	        this.rememberDraft = source["rememberDraft"];
+	        this.thumbnails = source["thumbnails"];
+	        this.libraryView = source["libraryView"];
 	        this.draft = source["draft"];
 	        this.draftRepeat = source["draftRepeat"];
 	        this.mode = source["mode"];
@@ -502,6 +508,8 @@ export namespace picker {
 	    name: string;
 	    size: number;
 	    modified: number;
+	    key: string;
+	    thumb: string;
 
 	    static createFrom(source: any = {}) {
 	        return new VideoFile(source);
@@ -512,6 +520,8 @@ export namespace picker {
 	        this.name = source["name"];
 	        this.size = source["size"];
 	        this.modified = source["modified"];
+	        this.key = source["key"];
+	        this.thumb = source["thumb"];
 	    }
 	}
 

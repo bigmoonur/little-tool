@@ -7,6 +7,8 @@ import {picker} from '../models';
 
 export function ActivateLicense(arg1:string):Promise<license.Status>;
 
+export function AddVideos(arg1:string,arg2:Array<string>):Promise<void>;
+
 export function Cancel():Promise<void>;
 
 export function CancelAndQuit():Promise<void>;
@@ -15,7 +17,11 @@ export function ChooseMaterialRoot():Promise<main.State>;
 
 export function ChooseOutputRoot():Promise<main.State>;
 
+export function ChooseVideos():Promise<Array<string>>;
+
 export function ClearHistory():Promise<void>;
+
+export function CreateCategory(arg1:string):Promise<main.State>;
 
 export function CreateFolder(arg1:string):Promise<main.State>;
 
@@ -59,9 +65,13 @@ export function SaveDraft(arg1:Record<string, number>,arg2:Record<string, number
 
 export function SavePreset(arg1:string,arg2:Record<string, picker.Pick>,arg3:string):Promise<main.PresetSaved>;
 
+export function SaveThumbnail(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function SetCategoryTags(arg1:string,arg2:Array<string>):Promise<main.State>;
 
 export function SetFolder(arg1:string):Promise<main.State>;
+
+export function SetLibraryView(arg1:string):Promise<picker.Settings>;
 
 export function SetLock(arg1:string,arg2:string):Promise<applock.Status>;
 

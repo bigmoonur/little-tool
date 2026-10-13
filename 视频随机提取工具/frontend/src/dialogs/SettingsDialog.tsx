@@ -130,6 +130,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </section>
 
         <section>
+          <h3>素材库</h3>
+          <label className="check-row">
+            <input type="checkbox" checked={settings.thumbnails} onChange={e => update({ thumbnails: e.target.checked })} />
+            缓存视频缩略图
+          </label>
+          <p className="dim settings-note">
+            开启后素材库可以按图标显示，列表里鼠标移到视频上会弹出预览。缩略图保存在数据文件夹里，视频删除或更换后会自动清理；关闭这个选项会删掉已经缓存的缩略图。
+          </p>
+        </section>
+
+        <section>
           <h3>数据</h3>
           <p className="dim settings-note">选择过的文件夹、设置和复制记录保存在数据文件夹里，不会混进视频文件夹。</p>
           <div className="settings-actions">

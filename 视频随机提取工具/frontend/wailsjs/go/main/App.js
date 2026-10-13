@@ -6,6 +6,10 @@ export function ActivateLicense(arg1) {
   return window['go']['main']['App']['ActivateLicense'](arg1);
 }
 
+export function AddVideos(arg1, arg2) {
+  return window['go']['main']['App']['AddVideos'](arg1, arg2);
+}
+
 export function Cancel() {
   return window['go']['main']['App']['Cancel']();
 }
@@ -22,8 +26,16 @@ export function ChooseOutputRoot() {
   return window['go']['main']['App']['ChooseOutputRoot']();
 }
 
+export function ChooseVideos() {
+  return window['go']['main']['App']['ChooseVideos']();
+}
+
 export function ClearHistory() {
   return window['go']['main']['App']['ClearHistory']();
+}
+
+export function CreateCategory(arg1) {
+  return window['go']['main']['App']['CreateCategory'](arg1);
 }
 
 export function CreateFolder(arg1) {
@@ -110,12 +122,20 @@ export function SavePreset(arg1, arg2, arg3) {
   return window['go']['main']['App']['SavePreset'](arg1, arg2, arg3);
 }
 
+export function SaveThumbnail(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveThumbnail'](arg1, arg2, arg3);
+}
+
 export function SetCategoryTags(arg1, arg2) {
   return window['go']['main']['App']['SetCategoryTags'](arg1, arg2);
 }
 
 export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
+}
+
+export function SetLibraryView(arg1) {
+  return window['go']['main']['App']['SetLibraryView'](arg1);
 }
 
 export function SetLock(arg1, arg2) {

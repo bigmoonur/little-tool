@@ -14,3 +14,5 @@ func freeSpace(path string) (uint64, bool) {
 
 // hide 在 macOS / Linux 上不需要处理：以点开头的文件夹本来就是隐藏的。
 func hide(string) {}
+
+func unhide(string) {}

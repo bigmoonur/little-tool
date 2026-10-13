@@ -159,6 +159,8 @@ type VideoFile struct {
 	Name     string `json:"name"`
 	Size     int64  `json:"size"`
 	Modified int64  `json:"modified"` // 毫秒
+	Key      string `json:"key"`      // 缩略图的缓存名；没开缩略图时为空
+	Thumb    string `json:"thumb"`    // ready 已缓存，none 生成不了，空为未生成
 }
 
 // CategoryDir 返回分类的文件夹。分类必须是素材根目录下现有的子文件夹，别的路径一律不认。
@@ -180,6 +182,15 @@ func CategoryDir(root, category string) (string, error) {
 
 // ListVideos 列出一个分类里的视频，按名称排序。
 func ListVideos(root, category string) ([]VideoFile, error) {
+	return libraryVideos(root, category, false)
+}
+
+// ListVideosWithKeys 和 ListVideos 一样，并填好每个视频的 Key。
+func ListVideosWithKeys(root, category string) ([]VideoFile, error) {
+	return libraryVideos(root, category, true)
+}
+
+func libraryVideos(root, category string, keys bool) ([]VideoFile, error) {
 	dir, err := CategoryDir(root, category)
 	if err != nil {
 		return nil, err
@@ -191,6 +202,9 @@ func ListVideos(root, category string) ([]VideoFile, error) {
 	out := make([]VideoFile, len(vs))
 	for i, v := range vs {
 		out[i] = VideoFile{Name: v.name, Size: v.size, Modified: v.mod.UnixMilli()}
+		if keys {
+			out[i].Key = ThumbKey(root, category, v.name, v.size, v.mod)
+		}
 	}
 	return out, nil
 }
@@ -357,6 +371,29 @@ func CreateFolder(outputRoot, name string) error {
 			return userErr("「%s」已经存在", name)
 		}
 		return userErr("新建文件夹失败：%v", err)
+	}
+	return nil
+}
+
+// CreateCategory 在素材根目录下新建分类，避免大小写冲突。
+func CreateCategory(root, name string) error {
+	if err := ValidateFolderName(name); err != nil {
+		return err
+	}
+	if err := checkRoot(root, "素材根目录"); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return userErr("新建分类失败：%v", err)
+	}
+	for _, e := range entries {
+		if strings.EqualFold(e.Name(), name) {
+			return userErr("「%s」已经存在，可以直接选择它或换一个名称", e.Name())
+		}
+	}
+	if err := os.Mkdir(filepath.Join(root, name), 0o755); err != nil {
+		return userErr("新建分类失败：%v", err)
 	}
 	return nil
 }
