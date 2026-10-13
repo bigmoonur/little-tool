@@ -30,7 +30,7 @@
 ####
 ## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
 ####
-## 按当前用户安装：不需要管理员权限，安装到 %LOCALAPPDATA%\Programs\视频随机提取工具
+## 按当前用户安装：不需要管理员权限，安装到 %LOCALAPPDATA%\Programs\视频分发工具
 !define WAILS_INSTALL_SCOPE "user"
 !define REQUEST_EXECUTION_LEVEL "user"
 ####

@@ -37,7 +37,7 @@ export default function App() {
   if ('error' in boot) {
     return (
       <div className="fatal">
-        <h1>视频随机提取工具无法启动</h1>
+        <h1>视频分发工具无法启动</h1>
         <p>{boot.error}</p>
         <p className="dim">请确认当前 Windows 账户可以写入“应用数据”文件夹，然后重新打开程序。</p>
       </div>
@@ -233,7 +233,7 @@ function Shell({ init, initialState, license, setLicense }: {
         <header className="topbar">
           <div className="brand">
             <Logo />
-            <span>视频随机提取工具</span>
+            <span>视频分发工具</span>
           </div>
           <nav className="nav" role="tablist" aria-label="页面">
             {NAV.map((n, i) => (

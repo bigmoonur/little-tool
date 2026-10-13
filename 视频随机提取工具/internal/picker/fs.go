@@ -38,9 +38,10 @@ type video struct {
 
 // Category 是素材根目录下的一个子文件夹。
 type Category struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
-	Bytes int64  `json:"bytes"`
+	Name   string   `json:"name"`
+	Count  int      `json:"count"`
+	Bytes  int64    `json:"bytes"`
+	TagIDs []string `json:"tagIds"`
 }
 
 // Destination 是目标根目录下可以放入视频的子文件夹。
@@ -137,7 +138,7 @@ func scan(root string) ([]Category, map[string][]video, error) {
 		if err != nil {
 			return nil, nil, userErr("无法读取分类「%s」：%v", name, err)
 		}
-		c := Category{Name: name, Count: len(vs)}
+		c := Category{Name: name, Count: len(vs), TagIDs: []string{}}
 		for _, v := range vs {
 			c.Bytes += v.size
 		}

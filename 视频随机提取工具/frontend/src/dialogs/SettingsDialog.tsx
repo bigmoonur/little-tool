@@ -129,7 +129,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
-        <p className="settings-version dim">视频随机提取工具 {version}</p>
+        <p className="settings-version dim">视频分发工具 {version}</p>
       </div>
     </Modal>
   )

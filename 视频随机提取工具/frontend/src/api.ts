@@ -14,6 +14,12 @@ export const api = {
   setFolder: (name: string) => call<State>('SetFolder', name),
   createFolder: (name: string) => call<State>('CreateFolder', name),
 
+  createTag: (name: string) => call<{ state: State; id: string }>('CreateTag', name),
+  renameTag: (id: string, name: string) => call<State>('RenameTag', id, name),
+  setTagColor: (id: string, color: string) => call<State>('SetTagColor', id, color),
+  deleteTag: (id: string) => call<State>('DeleteTag', id),
+  setCategoryTags: (category: string, tagIds: string[]) => call<State>('SetCategoryTags', category, tagIds),
+
   prepare: (counts: Record<string, number>, clean: boolean) => call<PlanSummary>('Prepare', counts, clean),
   start: (id: string) => call<void>('Start', id),
   cancel: () => call<void>('Cancel'),

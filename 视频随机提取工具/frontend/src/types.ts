@@ -17,10 +17,22 @@ export interface InitInfo {
   platform: string
 }
 
+export type TagColor = 'indigo' | 'teal' | 'amber' | 'rose' | 'violet' | 'green' | 'orange' | 'slate'
+
+export const TAG_COLORS: TagColor[] = ['indigo', 'teal', 'amber', 'rose', 'violet', 'green', 'orange', 'slate']
+
+export interface Tag {
+  id: string
+  name: string
+  color: TagColor
+}
+
 export interface Category {
   name: string
   count: number
   bytes: number
+  /** 贴在这个分类上的标签。 */
+  tagIds: string[]
 }
 
 export interface Destination {
@@ -33,6 +45,7 @@ export interface State {
   outputRoot: string
   folder: string
   categories: Category[]
+  tags: Tag[]
   destinations: Destination[]
   materialError: string
   outputError: string

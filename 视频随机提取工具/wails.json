@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "视频随机提取工具",
-  "outputfilename": "视频随机提取工具",
+  "name": "视频分发工具",
+  "outputfilename": "视频分发工具",
   "frontend:install": "npm ci",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
@@ -11,9 +11,9 @@
     "email": ""
   },
   "info": {
-    "companyName": "视频随机提取工具",
-    "productName": "视频随机提取工具",
-    "productVersion": "2.0.0",
+    "companyName": "视频分发工具",
+    "productName": "视频分发工具",
+    "productVersion": "2.0.3",
     "copyright": "Copyright © 2026",
     "comments": "按分类随机抽取视频，复制到目标文件夹"
   }

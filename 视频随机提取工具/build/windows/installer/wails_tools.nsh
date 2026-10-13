@@ -5,16 +5,16 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "视频随机提取工具"
+    !define INFO_PROJECTNAME "视频分发工具"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "视频随机提取工具"
+    !define INFO_COMPANYNAME "视频分发工具"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "视频随机提取工具"
+    !define INFO_PRODUCTNAME "视频分发工具"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "2.0.0"
+    !define INFO_PRODUCTVERSION "2.0.3"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026"

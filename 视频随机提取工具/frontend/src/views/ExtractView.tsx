@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, Eraser, FolderOpen, FolderPlus, RefreshCw, TriangleAlert, X,
+  Check, Eraser, FolderOpen, FolderPlus, Plus, RefreshCw, Settings2, Tags, TriangleAlert, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
+import { useCategoryTagging } from '../dialogs/CategoryTagging'
 import { bytes, clock, num, shortPath } from '../lib/format'
-import type { Category, Item } from '../types'
+import type { Category, Item, Tag } from '../types'
 import { EnterKey } from '../ui/EnterKey'
 import { Setup } from './Setup'
 
@@ -44,6 +45,8 @@ export function ExtractView() {
     Object.fromEntries(Object.entries(settings.draft ?? {}).map(([k, v]) => [k, v ? String(v) : ''])),
   )
   const [clean, setClean] = useState(false)
+  const [tagFilter, setTagFilter] = useState<string[]>([])
+  const tagging = useCategoryTagging()
   const inputs = useRef(new Map<string, HTMLInputElement>())
   const doneBtn = useRef<HTMLButtonElement>(null)
   const copying = copy.phase === 'copying'
@@ -58,8 +61,21 @@ export function ExtractView() {
   const errors = state.categories.filter(c => rows.get(c.name)?.error)
   const total = active.reduce((s, c) => s + (rows.get(c.name)?.count ?? 0), 0)
   const folder = state.destinations.find(d => d.name === state.folder)
-  const order = state.categories.filter(c => c.count > 0).map(c => c.name)
   const hasInput = Object.values(draft).some(v => v.trim())
+
+  // ---------- 标签：贴在分类上，点标签只看带这个标签的分类 ----------
+
+  const tagById = useMemo(() => new Map<string, Tag>(state.tags.map(t => [t.id, t])), [state.tags])
+  // 只按还在的标签筛选，标签被删除后自动不再算数。
+  const activeTags = tagFilter.filter(id => tagById.has(id))
+  const filtering = activeTags.length > 0
+  const toggleTag = (id: string) => setTagFilter(activeTags.includes(id) ? activeTags.filter(x => x !== id) : [...activeTags, id])
+  const tagTotal = (id: string) => state.categories.filter(c => c.tagIds.includes(id)).length
+  // 筛选时只留下带所选标签的分类。已经填了数量的分类不隐藏，免得抽到看不见的内容。
+  const shown = (c: Category) => !filtering || c.tagIds.some(id => activeTags.includes(id)) || !!draft[c.name]?.trim()
+  const visible = state.categories.filter(shown)
+  // 回车依次经过的输入框：看得见的、有视频可抽的分类。
+  const order = visible.filter(c => c.count > 0).map(c => c.name)
   const ready = !!folder && total > 0 && errors.length === 0 && !copying
 
   // 记住数量（设置中开启时）
@@ -175,6 +191,19 @@ export function ExtractView() {
 
   if (!state.materialRoot || !state.outputRoot) return <Setup />
 
+  const addTag = (c: Category) => (
+    <button
+      className={`tag-add ${tagging.openName === c.name ? 'is-open' : ''}`}
+      aria-haspopup="dialog"
+      aria-label={`给「${c.name}」贴标签`}
+      title="给这个分类贴标签"
+      onClick={e => tagging.open(c, e.currentTarget)}
+    >
+      <Plus size={13} />
+      {!c.tagIds.length && <span>标签</span>}
+    </button>
+  )
+
   const progress = copy.progress
   const pct = progress ? Math.min(100, Math.floor((progress.bytesDone / Math.max(1, progress.bytesTotal)) * 100)) : 0
   const result = copy.phase === 'done' && copy.done?.ok ? copy.done.result : null
@@ -230,26 +259,49 @@ export function ExtractView() {
             </button>
           </div>
         ) : (
-          <>
-            <div className="toolbar">
-              {hasInput && (
-                <button className="btn btn-ghost" onClick={clearAll} disabled={copying}>
-                  <Eraser size={16} />
-                  清空数量
-                </button>
-              )}
-              <span className="toolbar-spacer" />
-              <span className="toolbar-hint" title="在数量栏按回车跳到下一项，最后一项按回车直接抽取">
-                <EnterKey /> 下一项，最后一项直接抽取
-              </span>
-            </div>
             <div className="pick-table cols-3" role="table">
+              {state.tags.length > 0 && (
+                <div className="tag-bar" role="group" aria-label="按标签筛选分类">
+                  <span className="tag-bar-label" title="点标签，只显示带这个标签的分类">
+                    <Tags size={16} />
+                    <span>标签</span>
+                  </span>
+                  <button className={`chip ${filtering ? '' : 'is-on'}`} aria-pressed={!filtering} onClick={() => setTagFilter([])} title="显示所有分类">
+                    全部
+                  </button>
+                  {state.tags.map(t => {
+                    const on = activeTags.includes(t.id)
+                    return (
+                      <button
+                        key={t.id}
+                        className={`chip c-${t.color} ${on ? 'is-on' : ''}`}
+                        aria-pressed={on}
+                        onClick={() => toggleTag(t.id)}
+                        title={on ? `不再按「${t.name}」筛选` : `只显示带「${t.name}」标签的分类`}
+                      >
+                        <i className="tag-dot" aria-hidden />
+                        <span className="chip-name">{t.name}</span>
+                        <span className="chip-n">{num(tagTotal(t.id))}</span>
+                      </button>
+                    )
+                  })}
+                  {filtering && (
+                    <span className="tag-bar-note">
+                      显示 {num(visible.length)} / {num(state.categories.length)} 个分类
+                    </span>
+                  )}
+                  <span className="toolbar-spacer" />
+                  <button className="icon-btn sm" onClick={tagging.manage} aria-label="管理标签" title="管理标签：新建、改名、换颜色、删除">
+                    <Settings2 size={15} />
+                  </button>
+                </div>
+              )}
               <div className="pick-head" role="row">
                 <span role="columnheader">分类</span>
                 <span role="columnheader" className="ta-c">数量</span>
                 <span role="columnheader" className="ta-r">本次</span>
               </div>
-              {state.categories.map(c => {
+              {visible.map(c => {
                 const r = rows.get(c.name)!
                 const empty = c.count === 0
                 return (
@@ -259,8 +311,35 @@ export function ExtractView() {
                     className={`pick-row c-none ${r.count > 0 ? 'is-active' : ''} ${r.error ? 'is-error' : ''} ${empty ? 'is-empty' : ''}`}
                   >
                     <div className="pick-name" role="cell">
-                      <span className="pick-title" title={c.name}>
-                        {c.name}
+                      <span className="pick-title-row">
+                        <span className="pick-title" title={c.name}>
+                          {c.name}
+                        </span>
+                        {c.tagIds.map((id, i) => {
+                          const t = tagById.get(id)
+                          if (!t) return null
+                          const on = activeTags.includes(id)
+                          const pill = (
+                            <button
+                              key={id}
+                              className={`tag-pill is-button c-${t.color} ${on ? 'is-hit' : ''}`}
+                              aria-pressed={on}
+                              onClick={() => toggleTag(id)}
+                              title={on ? `不再按「${t.name}」筛选` : `点一下，只显示带「${t.name}」标签的分类`}
+                            >
+                              <i className="tag-dot" aria-hidden />
+                              <span className="tag-pill-name">{t.name}</span>
+                            </button>
+                          )
+                          // 最后一个标签和“贴标签”的按钮连在一起换行，按钮不会单独掉到下一行。
+                          return i < c.tagIds.length - 1 ? pill : (
+                            <span key={id} className="tag-tail">
+                              {pill}
+                              {addTag(c)}
+                            </span>
+                          )
+                        })}
+                        {!c.tagIds.length && addTag(c)}
                       </span>
                       <span className="pick-meta">{empty ? '没有视频' : `共 ${num(c.count)} 个视频 · ${bytes(c.bytes)}`}</span>
                       {r.error && <span className="pick-error">{r.error}</span>}
@@ -288,15 +367,30 @@ export function ExtractView() {
                   </div>
                 )
               })}
+              {filtering && visible.length === 0 && (
+                <div className="pick-empty">
+                  还没有分类带所选的标签。点分类名称旁边的“标签”可以贴上。
+                  <button className="link" onClick={() => setTagFilter([])}>
+                    显示所有分类
+                  </button>
+                </div>
+              )}
             </div>
-          </>
         )}
       </section>
 
       <aside className="extract-side">
         <div className="slip">
           <div className="slip-perf" aria-hidden />
-          <div className="slip-label">本次抽取</div>
+          <div className="slip-head">
+            <span className="slip-label">本次抽取</span>
+            {hasInput && (
+              <button className="slip-clear" onClick={clearAll} disabled={copying} title="清空所有分类填写的数量">
+                <Eraser size={14} />
+                清空数量
+              </button>
+            )}
+          </div>
           <div className="slip-total">
             <span key={total} className="slip-num">
               {num(total)}
@@ -314,7 +408,7 @@ export function ExtractView() {
               {active.length > 6 && <li className="dim">另外 {active.length - 6} 个分类</li>}
             </ul>
           ) : (
-            <p className="slip-hint">在左侧填写每个分类要抽几个视频。每类随机抽取、不重复，原素材始终保留。</p>
+            <p className="slip-hint">在左侧填写每个分类要抽几个视频，按回车跳到下一项，最后一项按回车直接抽取。每类随机抽取、不重复，原素材始终保留。</p>
           )}
 
           <div className="dest">
@@ -451,6 +545,7 @@ export function ExtractView() {
           </div>
         )}
       </aside>
+      {tagging.node}
     </div>
   )
 }

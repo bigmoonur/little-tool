@@ -30,8 +30,16 @@ export function CreateFolder(arg1) {
   return window['go']['main']['App']['CreateFolder'](arg1);
 }
 
+export function CreateTag(arg1) {
+  return window['go']['main']['App']['CreateTag'](arg1);
+}
+
 export function DeactivateLicense() {
   return window['go']['main']['App']['DeactivateLicense']();
+}
+
+export function DeleteTag(arg1) {
+  return window['go']['main']['App']['DeleteTag'](arg1);
 }
 
 export function History() {
@@ -62,12 +70,24 @@ export function RefreshLicense() {
   return window['go']['main']['App']['RefreshLicense']();
 }
 
+export function RenameTag(arg1, arg2) {
+  return window['go']['main']['App']['RenameTag'](arg1, arg2);
+}
+
 export function SaveDraft(arg1) {
   return window['go']['main']['App']['SaveDraft'](arg1);
 }
 
+export function SetCategoryTags(arg1, arg2) {
+  return window['go']['main']['App']['SetCategoryTags'](arg1, arg2);
+}
+
 export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
+}
+
+export function SetTagColor(arg1, arg2) {
+  return window['go']['main']['App']['SetTagColor'](arg1, arg2);
 }
 
 export function Start(arg1) {

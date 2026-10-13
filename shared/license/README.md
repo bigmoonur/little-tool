@@ -1,6 +1,6 @@
 # 共享授权模块
 
-文本随机提取工具和视频随机提取工具通过本地 Go module `replace` 引用这里，避免授权逻辑和加固修复分叉。Account、Product、Policy ID 与 Ed25519 公钥统一在 `config.go` 配置；客户端不包含管理员或产品令牌，只使用用户授权码。
+链接抽取工具和视频分发工具通过本地 Go module `replace` 引用这里，避免授权逻辑和加固修复分叉。Account、Product、Policy ID 与 Ed25519 公钥统一在 `config.go` 配置；客户端不包含管理员或产品令牌，只使用用户授权码。
 
 ## 验证与正常使用
 

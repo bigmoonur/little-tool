@@ -1,9 +1,9 @@
-# 视频随机提取工具 · 开发说明
+# 视频分发工具 · 开发说明
 
-与「文本随机提取工具」同一套技术和设计语言的 Windows 桌面工具，在 macOS 上开发和打包。用户使用说明见 [使用说明.md](使用说明.md)。
+与「链接抽取工具」同一套技术和设计语言的 Windows 桌面工具，在 macOS 上开发和打包。用户使用说明见 [使用说明.md](使用说明.md)。
 
 - 后端：Go + [Wails v2](https://wails.io)，打包后是单个 exe
-- 前端：React + TypeScript + Vite；弹窗、提示条、回车键图标与「文本随机提取工具」共用同一份实现，样式沿用同一套色彩和组件
+- 前端：React + TypeScript + Vite；弹窗、提示条、回车键图标与「链接抽取工具」共用同一份实现，样式沿用同一套色彩和组件
 
 ## 目录
 
@@ -16,12 +16,13 @@ internal/picker/
   copy.go                  暂存复制 → 检查 → 一次性放入；失败或取消时回滚
   disk_*.go                剩余空间、隐藏临时文件夹（按平台）
   store.go                 settings.json、history.json、window.json
+  tags.go                  标签（名称、颜色）和每个分类贴的标签，保存在 tags.json
   picker_test.go
 frontend/src/
   App.tsx                  外壳：顶栏、复制状态、自动刷新、关闭确认
   views/                   首次使用、抽取页、记录页
-  dialogs/                 设置
-  ui/                      弹窗、提示条、回车键图标、标志
+  dialogs/                 设置、标签管理和贴标签
+  ui/                      弹窗、小面板、提示条、标签、回车键图标、标志
 ../shared/license/        两款工具共用的 Keygen 授权和安全回归测试
 license.go                 授权接口与后端操作检查
 build.sh / build.ps1        相同发布策略：默认无 Garble、production、移除路径和符号
@@ -58,7 +59,7 @@ cd frontend && npx tsc --noEmit
 
 ## 授权（Keygen）
 
-与文本随机提取工具共用 [`../shared/license`](../shared/license/README.md)，Account、Product、Policy ID、公钥和机器指纹相同。同一授权码在同一电脑上共用一个设备名额；各自的缓存保存在各自的数据目录，首次使用分别输入一次授权码。
+与链接抽取工具共用 [`../shared/license`](../shared/license/README.md)，Account、Product、Policy ID、公钥和机器指纹相同。同一授权码在同一电脑上共用一个设备名额；各自的缓存保存在各自的数据目录，首次使用分别输入一次授权码。
 
 - 启动时联网验证，运行中每 24 小时复核；只有后台要求心跳时才按后台期限发送心跳。
 - 每分钟和每次核心操作都做本地检查；签名有效的缓存最多允许离线 7 天，且不超过授权到期。

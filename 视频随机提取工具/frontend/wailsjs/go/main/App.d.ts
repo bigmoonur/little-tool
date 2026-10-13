@@ -18,7 +18,11 @@ export function ClearHistory():Promise<void>;
 
 export function CreateFolder(arg1:string):Promise<main.State>;
 
+export function CreateTag(arg1:string):Promise<main.TagCreated>;
+
 export function DeactivateLicense():Promise<license.Status>;
+
+export function DeleteTag(arg1:string):Promise<main.State>;
 
 export function History():Promise<Array<picker.HistoryEntry>>;
 
@@ -34,9 +38,15 @@ export function Prepare(arg1:Record<string, number>,arg2:boolean):Promise<main.P
 
 export function RefreshLicense():Promise<license.Status>;
 
+export function RenameTag(arg1:string,arg2:string):Promise<main.State>;
+
 export function SaveDraft(arg1:Record<string, number>):Promise<void>;
 
+export function SetCategoryTags(arg1:string,arg2:Array<string>):Promise<main.State>;
+
 export function SetFolder(arg1:string):Promise<main.State>;
+
+export function SetTagColor(arg1:string,arg2:string):Promise<main.State>;
 
 export function Start(arg1:string):Promise<void>;
 

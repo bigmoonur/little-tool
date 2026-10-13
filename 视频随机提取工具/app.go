@@ -16,7 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const AppVersion = "2.0.0"
+const AppVersion = "2.0.3"
 
 type App struct {
 	ctx     context.Context
@@ -119,6 +119,7 @@ type State struct {
 	OutputRoot    string               `json:"outputRoot"`
 	Folder        string               `json:"folder"`
 	Categories    []picker.Category    `json:"categories"`
+	Tags          []picker.Tag         `json:"tags"`
 	Destinations  []picker.Destination `json:"destinations"`
 	MaterialError string               `json:"materialError"`
 	OutputError   string               `json:"outputError"`
@@ -128,15 +129,18 @@ type State struct {
 
 func (a *App) State() State {
 	if a.store == nil {
-		return State{Categories: []picker.Category{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		return State{Categories: []picker.Category{}, Tags: []picker.Tag{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
 	}
 	s := a.store.Settings()
 	st := State{MaterialRoot: s.MaterialRoot, OutputRoot: s.OutputRoot, Folder: s.Folder,
-		Categories: []picker.Category{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		Categories: []picker.Category{}, Tags: a.store.Tags(), Destinations: []picker.Destination{}, Leftovers: []string{}}
 	if s.MaterialRoot != "" {
 		if cats, err := picker.ScanCategories(s.MaterialRoot); err != nil {
 			st.MaterialError = err.Error()
 		} else {
+			for i := range cats {
+				cats[i].TagIDs = a.store.CategoryTags(cats[i].Name)
+			}
 			st.Categories = cats
 		}
 	}
@@ -163,6 +167,51 @@ func (a *App) State() State {
 	st.Busy = a.busy
 	a.mu.Unlock()
 	return st
+}
+
+type TagCreated struct {
+	State State  `json:"state"`
+	ID    string `json:"id"`
+}
+
+func (a *App) CreateTag(name string) (TagCreated, error) {
+	if err := a.requireLicense(); err != nil {
+		return TagCreated{State: a.State()}, err
+	}
+	id, err := a.store.CreateTag(name)
+	return TagCreated{State: a.State(), ID: id}, err
+}
+
+func (a *App) RenameTag(id, name string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.RenameTag(id, name)
+	return a.State(), err
+}
+
+func (a *App) SetTagColor(id, color string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.SetTagColor(id, color)
+	return a.State(), err
+}
+
+func (a *App) DeleteTag(id string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.DeleteTag(id)
+	return a.State(), err
+}
+
+func (a *App) SetCategoryTags(category string, tagIDs []string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.SetCategoryTags(category, tagIDs)
+	return a.State(), err
 }
 
 func (a *App) chooseDir(title, current string) string {

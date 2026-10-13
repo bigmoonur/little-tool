@@ -47,6 +47,7 @@ type Store struct {
 	settings Settings
 	history  []HistoryEntry
 	window   *WindowState
+	tags     tagData
 }
 
 func OpenStore(dir string) (*Store, error) {
@@ -71,6 +72,7 @@ func OpenStore(dir string) (*Store, error) {
 	if s.history == nil {
 		s.history = []HistoryEntry{}
 	}
+	s.loadTags()
 	return s, nil
 }
 

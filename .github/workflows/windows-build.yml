@@ -36,7 +36,7 @@ jobs:
             data_env: MATERIAL_PICKER_DATA
             artifact: windows-release
           - directory: 视频随机提取工具
-            program: 视频随机提取工具
+            program: 视频分发工具
             key: video
             data_env: VIDEO_PICKER_DATA
             artifact: windows-release-video

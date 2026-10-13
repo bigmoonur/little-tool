@@ -62,7 +62,15 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			a := licensedFixture(t, lic)
+			tagID, err := a.store.CreateTag("已有标签")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.store.SetCategoryTags("开场", []string{tagID}); err != nil {
+				t.Fatal(err)
+			}
 			beforeSettings, beforeHistory := a.store.Settings(), a.store.History()
+			beforeTags, beforeCategoryTags := a.store.Tags(), a.store.CategoryTags("开场")
 			plan, err := picker.Prepare(beforeSettings.MaterialRoot, beforeSettings.OutputRoot, beforeSettings.Folder, map[string]int{"开场": 1}, false, a.rng)
 			if err != nil {
 				t.Fatal(err)
@@ -76,6 +84,11 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 				"prepare":              func() error { _, err := a.Prepare(map[string]int{"开场": 1}, true); return err },
 				"start prepared batch": func() error { return a.Start("prepared") },
 				"clear history":        a.ClearHistory,
+				"create tag":           func() error { _, err := a.CreateTag("新标签"); return err },
+				"rename tag":           func() error { _, err := a.RenameTag(tagID, "新名称"); return err },
+				"set tag color":        func() error { _, err := a.SetTagColor(tagID, "rose"); return err },
+				"delete tag":           func() error { _, err := a.DeleteTag(tagID); return err },
+				"set category tags":    func() error { _, err := a.SetCategoryTags("开场", nil); return err },
 			}
 			for name, call := range calls {
 				t.Run(name, func(t *testing.T) {
@@ -85,6 +98,9 @@ func TestUnlicensedOperationsCannotChangeUserData(t *testing.T) {
 					}
 					if !reflect.DeepEqual(beforeSettings, a.store.Settings()) || !reflect.DeepEqual(beforeHistory, a.store.History()) {
 						t.Fatal("unlicensed call changed settings or history")
+					}
+					if !reflect.DeepEqual(beforeTags, a.store.Tags()) || !reflect.DeepEqual(beforeCategoryTags, a.store.CategoryTags("开场")) {
+						t.Fatal("unlicensed call changed tags or category assignments")
 					}
 					if a.pending != &plan || a.busy {
 						t.Fatal("unlicensed call consumed or started the prepared batch")
