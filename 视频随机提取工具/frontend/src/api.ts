@@ -1,7 +1,7 @@
 // 对 Wails 生成的绑定做一层类型整理。
 import * as Go from '../wailsjs/go/main/App'
 import * as Runtime from '../wailsjs/runtime/runtime'
-import type { Done, HistoryEntry, InitInfo, LicenseStatus, PlanSummary, Progress, Settings, State, Theme } from './types'
+import type { Done, HistoryEntry, InitInfo, LicenseStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, Theme } from './types'
 
 const go = Go as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
 const call = <T,>(name: string, ...args: unknown[]) => go[name](...args) as Promise<T>
@@ -20,7 +20,7 @@ export const api = {
   deleteTag: (id: string) => call<State>('DeleteTag', id),
   setCategoryTags: (category: string, tagIds: string[]) => call<State>('SetCategoryTags', category, tagIds),
 
-  prepare: (counts: Record<string, number>, clean: boolean) => call<PlanSummary>('Prepare', counts, clean),
+  prepare: (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => call<PlanSummary>('Prepare', picks, mode, clean),
   start: (id: string) => call<void>('Start', id),
   cancel: () => call<void>('Cancel'),
   cancelAndQuit: () => call<void>('CancelAndQuit'),
@@ -30,7 +30,11 @@ export const api = {
 
   updateSettings: (s: { alwaysOnTop: boolean; openAfter: boolean; theme: Theme; rememberDraft: boolean }) =>
     call<Settings>('UpdateSettings', s),
-  saveDraft: (d: Record<string, number>) => call<void>('SaveDraft', d),
+  saveDraft: (counts: Record<string, number>, repeats: Record<string, number>, mode: RepeatMode) => call<void>('SaveDraft', counts, repeats, mode),
+
+  savePreset: (name: string, picks: Record<string, Pick>, mode: RepeatMode) => call<{ state: State; id: string }>('SavePreset', name, picks, mode),
+  renamePreset: (id: string, name: string) => call<State>('RenamePreset', id, name),
+  deletePreset: (id: string) => call<State>('DeletePreset', id),
   openFolder: (path: string) => call<void>('OpenFolder', path),
   openDataFolder: () => call<void>('OpenDataFolder'),
 

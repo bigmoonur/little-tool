@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Done, LicenseStatus, PlanSummary, Progress, Settings, State, View } from './types'
+import type { Done, Draft, LicenseStatus, Pick, PlanSummary, Progress, RepeatMode, Settings, State, View } from './types'
 import type { ConfirmOptions, PromptOptions } from './ui/Modal'
 import type { ToastOptions } from './ui/Toasts'
 
@@ -27,8 +27,13 @@ export interface Ctx {
   run: <T>(p: Promise<T>) => Promise<T | undefined>
   historyVersion: number
   copy: CopyState
+  /** 抽取页填写的数量和乘数；放在这里，切到记录页再回来还在，记录页也能把用过的参数填回去。 */
+  draft: Draft
+  setDraft: React.Dispatch<React.SetStateAction<Draft>>
+  repeatMode: RepeatMode
+  setRepeatMode: (m: RepeatMode) => void
   /** 抽取一批并开始复制；需要清空旧视频时先确认。 */
-  startCopy: (counts: Record<string, number>, clean: boolean) => Promise<void>
+  startCopy: (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => Promise<void>
   cancelCopy: () => void
   clearResult: () => void
   license: LicenseStatus

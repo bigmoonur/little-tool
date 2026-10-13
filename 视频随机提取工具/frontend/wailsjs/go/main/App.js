@@ -38,6 +38,10 @@ export function DeactivateLicense() {
   return window['go']['main']['App']['DeactivateLicense']();
 }
 
+export function DeletePreset(arg1) {
+  return window['go']['main']['App']['DeletePreset'](arg1);
+}
+
 export function DeleteTag(arg1) {
   return window['go']['main']['App']['DeleteTag'](arg1);
 }
@@ -62,20 +66,28 @@ export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
 }
 
-export function Prepare(arg1, arg2) {
-  return window['go']['main']['App']['Prepare'](arg1, arg2);
+export function Prepare(arg1, arg2, arg3) {
+  return window['go']['main']['App']['Prepare'](arg1, arg2, arg3);
 }
 
 export function RefreshLicense() {
   return window['go']['main']['App']['RefreshLicense']();
 }
 
+export function RenamePreset(arg1, arg2) {
+  return window['go']['main']['App']['RenamePreset'](arg1, arg2);
+}
+
 export function RenameTag(arg1, arg2) {
   return window['go']['main']['App']['RenameTag'](arg1, arg2);
 }
 
-export function SaveDraft(arg1) {
-  return window['go']['main']['App']['SaveDraft'](arg1);
+export function SaveDraft(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveDraft'](arg1, arg2, arg3);
+}
+
+export function SavePreset(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SavePreset'](arg1, arg2, arg3);
 }
 
 export function SetCategoryTags(arg1, arg2) {

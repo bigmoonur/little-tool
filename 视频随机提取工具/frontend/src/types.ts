@@ -8,8 +8,36 @@ export interface Settings {
   openAfter: boolean
   theme: Theme
   rememberDraft: boolean
+  /** 记住的数量、乘数和乘数规则（设置里开启时）。 */
   draft: Record<string, number>
+  draftRepeat: Record<string, number>
+  mode: RepeatMode
 }
+
+/** 乘数规则：重复同一批，或者分轮重新抽。 */
+export type RepeatMode = 'repeat' | 'random'
+
+/** 一个分类要抽几个、复制几份（或抽几轮）。 */
+export interface Pick {
+  count: number
+  repeat: number
+}
+
+/** 起了名字保存下来的一组参数。 */
+export interface Preset {
+  id: string
+  name: string
+  mode: RepeatMode
+  picks: Record<string, Pick>
+}
+
+/** 抽取页每个分类输入框里的原始文本。 */
+export interface DraftEntry {
+  count: string
+  repeat: string
+}
+
+export type Draft = Record<string, DraftEntry>
 
 export interface InitInfo {
   settings: Settings
@@ -46,6 +74,7 @@ export interface State {
   folder: string
   categories: Category[]
   tags: Tag[]
+  presets: Preset[]
   destinations: Destination[]
   materialError: string
   outputError: string
@@ -55,8 +84,11 @@ export interface State {
 
 export interface Item {
   category: string
+  /** 放进目标文件夹时用的文件名。 */
   name: string
   size: number
+  /** 同一个视频的另一份副本改了名字时，这里是原来的文件名。 */
+  origin?: string
 }
 
 export interface PlanSummary {
@@ -94,6 +126,9 @@ export interface HistoryEntry {
   items: Item[]
   removed: number
   bytes: number
+  /** 这一次用的数量、乘数和乘数规则。 */
+  picks: Record<string, Pick>
+  mode: RepeatMode
 }
 
 export interface Done {

@@ -4,7 +4,8 @@ import { api, errorText, events } from './api'
 import { AppContext, type CopyState, type Ctx } from './ctx'
 import { SettingsDialog } from './dialogs/SettingsDialog'
 import { day, num } from './lib/format'
-import type { InitInfo, LicenseStatus, Settings, State, View } from './types'
+import { draftToPicks, modeInfo, picksToDraft } from './lib/pick'
+import type { Draft, InitInfo, LicenseStatus, Pick, RepeatMode, Settings, State, View } from './types'
 import { ErrorBoundary } from './ui/ErrorBoundary'
 import { Logo } from './ui/Logo'
 import { useDialogs } from './ui/Modal'
@@ -66,6 +67,12 @@ function Shell({ init, initialState, license, setLicense }: {
   const [settings, setSettings] = useState<Settings>(init.settings)
   const [view, setView] = useState<View>('extract')
   const [copy, setCopy] = useState<CopyState>({ phase: 'idle' })
+  const [draft, setDraft] = useState<Draft>(() => {
+    const picks: Record<string, Pick> = {}
+    for (const [name, count] of Object.entries(init.settings.draft ?? {})) picks[name] = { count, repeat: init.settings.draftRepeat?.[name] ?? 1 }
+    return picksToDraft(picks)
+  })
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(modeInfo(init.settings.mode).mode)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { toast, node: toastNode } = useToasts()
@@ -93,10 +100,25 @@ function Shell({ init, initialState, license, setLicense }: {
     }
   }, [])
 
-  const startCopy = async (counts: Record<string, number>, clean: boolean) => {
+  // 记住数量（设置中开启时）
+  useEffect(() => {
+    if (!settings.rememberDraft) return
+    const t = window.setTimeout(() => {
+      const counts: Record<string, number> = {}
+      const repeats: Record<string, number> = {}
+      for (const [name, p] of Object.entries(draftToPicks(draft, state.categories))) {
+        counts[name] = p.count
+        if (p.repeat > 1) repeats[name] = p.repeat
+      }
+      api.saveDraft(counts, repeats, repeatMode)
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [draft, repeatMode, state.categories, settings.rememberDraft])
+
+  const startCopy = async (picks: Record<string, Pick>, mode: RepeatMode, clean: boolean) => {
     if (license.state !== 'active') return
     if (copyRef.current.phase === 'copying') return
-    const plan = await run(api.prepare(counts, clean))
+    const plan = await run(api.prepare(picks, mode, clean))
     if (!plan) return refresh()
     if (plan.old > 0) {
       const ok = await dialogs.confirm({
@@ -219,6 +241,10 @@ function Shell({ init, initialState, license, setLicense }: {
     run,
     historyVersion,
     copy,
+    draft,
+    setDraft,
+    repeatMode,
+    setRepeatMode,
     startCopy,
     cancelCopy: () => api.cancel(),
     clearResult: () => setCopy({ phase: 'idle' }),

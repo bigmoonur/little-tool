@@ -75,7 +75,7 @@ func TestScanOnlyDirectVideos(t *testing.T) {
 
 func TestCopyExactCountsAndOriginalsUntouched(t *testing.T) {
 	f := newFixture(t)
-	p, err := Prepare(f.material, f.output, "第一批", map[string]int{"开场": 2, "产品": 3, "结尾": 0}, false, rng())
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"开场": {Count: 2}, "产品": {Count: 3}, "结尾": {Count: 0}}, "", false, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,13 +106,13 @@ func TestCopyExactCountsAndOriginalsUntouched(t *testing.T) {
 
 func TestCountsValidation(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Prepare(f.material, f.output, "第一批", map[string]int{"结尾": 2}, false, rng()); err == nil {
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 2}}, "", false, rng()); err == nil {
 		t.Fatal("expected error when count exceeds videos")
 	}
-	if _, err := Prepare(f.material, f.output, "第一批", map[string]int{}, false, rng()); err == nil {
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{}, "", false, rng()); err == nil {
 		t.Fatal("expected error for empty request")
 	}
-	if _, err := Prepare(f.material, f.output, "第一批", map[string]int{"不存在": 1}, false, rng()); err == nil {
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"不存在": {Count: 1}}, "", false, rng()); err == nil {
 		t.Fatal("expected error for missing category")
 	}
 }
@@ -122,7 +122,7 @@ func TestSameNamesAreAvoided(t *testing.T) {
 	// 结尾里也有一个 p1.mp4（大小写不同），抽全部产品时必须避开它。
 	write(t, filepath.Join(f.material, "结尾", "P1.MP4"), "dup")
 	for seed := uint64(0); seed < 20; seed++ {
-		p, err := Prepare(f.material, f.output, "第一批", map[string]int{"产品": 4, "结尾": 1}, false, rand.New(rand.NewPCG(seed, 1)))
+		p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 4}, "结尾": {Count: 1}}, "", false, rand.New(rand.NewPCG(seed, 1)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestSameNamesAreAvoided(t *testing.T) {
 		}
 	}
 	// 结尾两个都要时，必然与产品冲突。
-	if _, err := Prepare(f.material, f.output, "第一批", map[string]int{"产品": 4, "结尾": 2}, false, rng()); err == nil {
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 4}, "结尾": {Count: 2}}, "", false, rng()); err == nil {
 		t.Fatal("expected not-enough-videos error")
 	}
 }
@@ -144,10 +144,10 @@ func TestExistingFilesNeverOverwritten(t *testing.T) {
 	f := newFixture(t)
 	dest := filepath.Join(f.output, "第一批")
 	write(t, filepath.Join(dest, "E1.mp4"), "keep me")
-	if _, err := Prepare(f.material, f.output, "第一批", map[string]int{"结尾": 1}, false, rng()); err == nil {
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1}}, "", false, rng()); err == nil {
 		t.Fatal("only video conflicts with existing file: expected error")
 	}
-	p, err := Prepare(f.material, f.output, "第一批", map[string]int{"开场": 3}, false, rng())
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"开场": {Count: 3}}, "", false, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestCleanReplacesOnlyDirectVideos(t *testing.T) {
 	write(t, filepath.Join(dest, "e1.mp4"), "old with same name")
 	write(t, filepath.Join(dest, "notes.txt"), "keep")
 	write(t, filepath.Join(dest, "sub", "inner.mp4"), "keep")
-	p, err := Prepare(f.material, f.output, "第一批", map[string]int{"结尾": 1}, true, rng())
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1}}, "", true, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestCancelKeepsDestinationUnchanged(t *testing.T) {
 	f := newFixture(t)
 	dest := filepath.Join(f.output, "第一批")
 	write(t, filepath.Join(dest, "old.mp4"), "old")
-	p, err := Prepare(f.material, f.output, "第一批", map[string]int{"产品": 4}, true, rng())
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 4}}, "", true, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestDestinationChangedDuringCopyAborts(t *testing.T) {
 	f := newFixture(t)
 	dest := filepath.Join(f.output, "第一批")
 	write(t, filepath.Join(dest, "old.mp4"), "old")
-	p, _ := Prepare(f.material, f.output, "第一批", map[string]int{"产品": 2}, true, rng())
+	p, _ := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 2}}, "", true, rng())
 	_, err := Execute(context.Background(), p, func(pr Progress) {
 		if pr.Done == 1 {
 			write(t, filepath.Join(dest, "external.txt"), "from another program")

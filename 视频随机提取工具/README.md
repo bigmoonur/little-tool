@@ -12,16 +12,16 @@ main.go                    窗口配置、数据目录
 app.go                     暴露给界面的方法：选择文件夹、抽取、复制进度与取消、记录、设置
 internal/picker/
   fs.go                    扫描分类和目标文件夹、文件夹名称规则、两个根目录相互独立、账号接口预留
-  plan.go                  随机抽取，自动避开同名视频
+  plan.go                  随机抽取、乘数和两种乘数规则；自动避开同名视频，副本在文件名后加随机字符
   copy.go                  暂存复制 → 检查 → 一次性放入；失败或取消时回滚
   disk_*.go                剩余空间、隐藏临时文件夹（按平台）
-  store.go                 settings.json、history.json、window.json
+  store.go                 settings.json、history.json（含每次用的参数）、presets.json、window.json
   tags.go                  标签（名称、颜色）和每个分类贴的标签，保存在 tags.json
   picker_test.go
 frontend/src/
   App.tsx                  外壳：顶栏、复制状态、自动刷新、关闭确认
   views/                   首次使用、抽取页、记录页
-  dialogs/                 设置、标签管理和贴标签
+  dialogs/                 设置、方案管理、标签管理和贴标签
   ui/                      弹窗、小面板、提示条、标签、回车键图标、标志
 ../shared/license/        两款工具共用的 Keygen 授权和安全回归测试
 license.go                 授权接口与后端操作检查

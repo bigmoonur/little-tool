@@ -108,7 +108,7 @@ type InitInfo struct {
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeRepeat}}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
 	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS}, nil
 }
@@ -120,6 +120,7 @@ type State struct {
 	Folder        string               `json:"folder"`
 	Categories    []picker.Category    `json:"categories"`
 	Tags          []picker.Tag         `json:"tags"`
+	Presets       []picker.Preset      `json:"presets"`
 	Destinations  []picker.Destination `json:"destinations"`
 	MaterialError string               `json:"materialError"`
 	OutputError   string               `json:"outputError"`
@@ -129,11 +130,11 @@ type State struct {
 
 func (a *App) State() State {
 	if a.store == nil {
-		return State{Categories: []picker.Category{}, Tags: []picker.Tag{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
+		return State{Categories: []picker.Category{}, Tags: []picker.Tag{}, Presets: []picker.Preset{}, Destinations: []picker.Destination{}, Leftovers: []string{}}
 	}
 	s := a.store.Settings()
 	st := State{MaterialRoot: s.MaterialRoot, OutputRoot: s.OutputRoot, Folder: s.Folder,
-		Categories: []picker.Category{}, Tags: a.store.Tags(), Destinations: []picker.Destination{}, Leftovers: []string{}}
+		Categories: []picker.Category{}, Tags: a.store.Tags(), Presets: a.store.Presets(), Destinations: []picker.Destination{}, Leftovers: []string{}}
 	if s.MaterialRoot != "" {
 		if cats, err := picker.ScanCategories(s.MaterialRoot); err != nil {
 			st.MaterialError = err.Error()
@@ -167,6 +168,35 @@ func (a *App) State() State {
 	st.Busy = a.busy
 	a.mu.Unlock()
 	return st
+}
+
+type PresetSaved struct {
+	State State  `json:"state"`
+	ID    string `json:"id"`
+}
+
+func (a *App) SavePreset(name string, picks map[string]picker.Pick, mode string) (PresetSaved, error) {
+	if err := a.requireLicense(); err != nil {
+		return PresetSaved{State: a.State()}, err
+	}
+	id, err := a.store.SavePreset(name, picks, mode)
+	return PresetSaved{State: a.State(), ID: id}, err
+}
+
+func (a *App) RenamePreset(id, name string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.RenamePreset(id, name)
+	return a.State(), err
+}
+
+func (a *App) DeletePreset(id string) (State, error) {
+	if err := a.requireLicense(); err != nil {
+		return a.State(), err
+	}
+	err := a.store.DeletePreset(id)
+	return a.State(), err
 }
 
 type TagCreated struct {
@@ -245,6 +275,8 @@ func (a *App) ChooseMaterialRoot() (State, error) {
 	a.store.Update(func(st *picker.Settings) {
 		if st.MaterialRoot != path {
 			st.Draft = map[string]int{}
+			st.DraftRepeat = map[string]int{}
+			st.Mode = picker.ModeRepeat
 		}
 		st.MaterialRoot = path
 	})
@@ -329,7 +361,7 @@ type PlanSummary struct {
 }
 
 // Prepare 随机抽取一批视频但不复制；需要清理旧视频时由界面确认后再调用 Start。
-func (a *App) Prepare(counts map[string]int, clean bool) (PlanSummary, error) {
+func (a *App) Prepare(picks map[string]picker.Pick, mode string, clean bool) (PlanSummary, error) {
 	if err := a.requireLicense(); err != nil {
 		return PlanSummary{}, err
 	}
@@ -337,7 +369,7 @@ func (a *App) Prepare(counts map[string]int, clean bool) (PlanSummary, error) {
 		return PlanSummary{}, err
 	}
 	s := a.store.Settings()
-	p, err := picker.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, counts, clean, a.rng)
+	p, err := picker.Prepare(s.MaterialRoot, s.OutputRoot, s.Folder, picks, mode, clean, a.rng)
 	if err != nil {
 		return PlanSummary{}, err
 	}
@@ -456,10 +488,10 @@ func (a *App) UpdateSettings(u UISettings) picker.Settings {
 	return s
 }
 
-func (a *App) SaveDraft(draft map[string]int) {
+func (a *App) SaveDraft(counts map[string]int, repeats map[string]int, mode string) {
 	a.store.Update(func(st *picker.Settings) {
 		if st.RememberDraft {
-			st.Draft = draft
+			st.Draft, st.DraftRepeat, st.Mode = counts, repeats, mode
 		}
 	})
 }

@@ -1,28 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, Eraser, FolderOpen, FolderPlus, Plus, RefreshCw, Settings2, Tags, TriangleAlert, X,
+  BookmarkPlus, Check, ChevronDown, Eraser, FolderOpen, FolderPlus, Layers, Plus, RefreshCw, Settings2, Tags, TriangleAlert, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { useCategoryTagging } from '../dialogs/CategoryTagging'
+import { PresetManager } from '../dialogs/PresetManager'
 import { bytes, clock, num, shortPath } from '../lib/format'
+import { draftToPicks, evaluate, modeInfo, picksToDraft, ruleLine, samePicks, splitCombined, usesRule, type RowState } from '../lib/pick'
 import type { Category, Item, Tag } from '../types'
 import { EnterKey } from '../ui/EnterKey'
+import { anchorOf, useMenu, type MenuItem } from '../ui/Menu'
+import { ModeSwitch } from './ModeSwitch'
 import { Setup } from './Setup'
-
-interface Row {
-  count: number
-  error: string
-}
-
-function evaluate(c: Category, raw: string | undefined): Row {
-  const v = (raw ?? '').trim()
-  if (v === '') return { count: 0, error: '' }
-  if (!/^\d+$/.test(v)) return { count: 0, error: '请填写整数' }
-  const n = Number(v)
-  if (n > c.count) return { count: n, error: `最多 ${num(c.count)} 个` }
-  return { count: n, error: '' }
-}
 
 function validateFolderName(name: string) {
   if (!name.trim()) return '请输入文件夹名称'
@@ -40,28 +30,32 @@ function groupItems(items: Item[]) {
 }
 
 export function ExtractView() {
-  const { state, setState, refresh, settings, run, prompt, toast, copy, startCopy, cancelCopy, clearResult } = useApp()
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(Object.entries(settings.draft ?? {}).map(([k, v]) => [k, v ? String(v) : ''])),
-  )
+  const {
+    state, setState, refresh, run, prompt, confirm, toast, copy, startCopy, cancelCopy, clearResult, draft, setDraft, repeatMode, setRepeatMode,
+  } = useApp()
   const [clean, setClean] = useState(false)
   const [tagFilter, setTagFilter] = useState<string[]>([])
+  const [managing, setManaging] = useState(false)
   const tagging = useCategoryTagging()
+  const menu = useMenu()
   const inputs = useRef(new Map<string, HTMLInputElement>())
   const doneBtn = useRef<HTMLButtonElement>(null)
   const copying = copy.phase === 'copying'
 
   const rows = useMemo(() => {
-    const m = new Map<string, Row>()
+    const m = new Map<string, RowState>()
     for (const c of state.categories) m.set(c.name, evaluate(c, draft[c.name]))
     return m
   }, [state.categories, draft])
 
   const active = state.categories.filter(c => (rows.get(c.name)?.count ?? 0) > 0)
   const errors = state.categories.filter(c => rows.get(c.name)?.error)
-  const total = active.reduce((s, c) => s + (rows.get(c.name)?.count ?? 0), 0)
+  const total = active.reduce((s, c) => s + (rows.get(c.name)?.files ?? 0), 0)
   const folder = state.destinations.find(d => d.name === state.folder)
-  const hasInput = Object.values(draft).some(v => v.trim())
+  const filled = (name: string) => !!(draft[name]?.count.trim() || draft[name]?.repeat.trim())
+  const hasInput = Object.keys(draft).some(filled)
+  const picks = useMemo(() => draftToPicks(draft, state.categories), [draft, state.categories])
+  const activePreset = state.presets.find(p => p.mode === repeatMode && samePicks(p.picks, picks))
 
   // ---------- 标签：贴在分类上，点标签只看带这个标签的分类 ----------
 
@@ -72,22 +66,11 @@ export function ExtractView() {
   const toggleTag = (id: string) => setTagFilter(activeTags.includes(id) ? activeTags.filter(x => x !== id) : [...activeTags, id])
   const tagTotal = (id: string) => state.categories.filter(c => c.tagIds.includes(id)).length
   // 筛选时只留下带所选标签的分类。已经填了数量的分类不隐藏，免得抽到看不见的内容。
-  const shown = (c: Category) => !filtering || c.tagIds.some(id => activeTags.includes(id)) || !!draft[c.name]?.trim()
+  const shown = (c: Category) => !filtering || c.tagIds.some(id => activeTags.includes(id)) || filled(c.name)
   const visible = state.categories.filter(shown)
   // 回车依次经过的输入框：看得见的、有视频可抽的分类。
   const order = visible.filter(c => c.count > 0).map(c => c.name)
   const ready = !!folder && total > 0 && errors.length === 0 && !copying
-
-  // 记住数量（设置中开启时）
-  useEffect(() => {
-    if (!settings.rememberDraft) return
-    const t = window.setTimeout(() => {
-      const d: Record<string, number> = {}
-      for (const [k, v] of Object.entries(draft)) if (/^\d+$/.test(v.trim()) && Number(v) > 0) d[k] = Number(v)
-      api.saveDraft(d)
-    }, 600)
-    return () => window.clearTimeout(t)
-  }, [draft, settings.rememberDraft])
 
   // 换了文件夹或文件夹里没有视频时，取消“清空旧视频”。
   useEffect(() => {
@@ -112,9 +95,8 @@ export function ExtractView() {
       toast('请选择或新建一个放入视频的文件夹', { kind: 'error' })
       return
     }
-    const counts: Record<string, number> = {}
-    for (const c of active) counts[c.name] = rows.get(c.name)!.count
-    startCopy(counts, clean).then(() => setClean(false))
+    setDraft(d => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, splitCombined(v)])))
+    startCopy(picks, repeatMode, clean).then(() => setClean(false))
   }
   const startRef = useRef(start)
   startRef.current = start
@@ -136,10 +118,23 @@ export function ExtractView() {
     el?.select()
   }
 
+  const setEntry = (name: string, key: 'count' | 'repeat', value: string) =>
+    setDraft(d => ({ ...d, [name]: { count: d[name]?.count ?? '', repeat: d[name]?.repeat ?? '', [key]: value } }))
+
+  // 离开数量栏时把 5*3 拆成数量 5、乘数 3。
+  const normalize = (name: string) =>
+    setDraft(d => {
+      const e = d[name]
+      if (!e) return d
+      const next = splitCombined(e)
+      return next === e ? d : { ...d, [name]: next }
+    })
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, name: string) => {
     const i = order.indexOf(name)
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
+      normalize(name)
       if (e.shiftKey) return focusRow(order[i - 1])
       if (i < order.length - 1) return focusRow(order[i + 1])
       start()
@@ -187,6 +182,60 @@ export function ExtractView() {
     const prev = draft
     setDraft({})
     toast('已清空所有数量', { action: { label: '撤销', onClick: () => setDraft(prev) } })
+  }
+
+  // ---------- 方案：起了名字保存下来的一组数量、乘数和规则 ----------
+
+  const applyPreset = (id: string) => {
+    const p = state.presets.find(x => x.id === id)
+    if (!p) return
+    const prev = { draft, repeatMode }
+    // 只填还在素材根目录里的分类。
+    setDraft(picksToDraft(Object.fromEntries(Object.entries(p.picks).filter(([name]) => state.categories.some(c => c.name === name)))))
+    setRepeatMode(modeInfo(p.mode).mode)
+    const undo = () => {
+      setDraft(prev.draft)
+      setRepeatMode(prev.repeatMode)
+    }
+    toast(`已填入方案「${p.name}」`, { kind: 'ok', action: { label: '撤销', onClick: undo } })
+  }
+
+  const savePreset = async () => {
+    const name = await prompt({
+      title: '保存为方案',
+      label: '方案名称',
+      initial: activePreset?.name ?? '',
+      placeholder: '例如：日常发布',
+      confirmText: '保存',
+      hint: '以后可以在“方案”里一键填入这组数量和乘数，乘数规则也会一起保存。',
+    })
+    if (!name) return
+    const existing = state.presets.find(p => p.name.toLowerCase() === name.toLowerCase())
+    if (existing && existing.id !== activePreset?.id) {
+      const ok = await confirm({ title: `替换方案「${existing.name}」？`, message: '已有同名方案，保存后会用当前的数量、乘数和规则替换它。', confirmText: '替换' })
+      if (!ok) return
+    }
+    const res = await run(api.savePreset(name, picks, repeatMode))
+    if (res) {
+      setState(res.state)
+      toast(`已保存方案「${name}」`, { kind: 'ok' })
+    }
+  }
+
+  const openPresetMenu = (el: HTMLElement) => {
+    const items: MenuItem[] = []
+    if (state.presets.length) {
+      items.push({ heading: '填入方案' })
+      for (const p of state.presets) {
+        const files = Object.entries(p.picks).reduce((n, [name, v]) => n + (state.categories.some(c => c.name === name) ? v.count * Math.max(1, v.repeat) : 0), 0)
+        const hint = [`${num(files)} 个`, ...(usesRule(p.picks, p.mode) ? [modeInfo(p.mode).short] : [])].join(' · ')
+        items.push({ label: p.name, hint, checked: p.id === activePreset?.id, icon: p.id === activePreset?.id ? <Check size={15} /> : null, onSelect: () => applyPreset(p.id) })
+      }
+      items.push({ divider: true })
+    }
+    items.push({ label: '把当前数量保存为方案…', icon: <BookmarkPlus size={15} />, onSelect: savePreset, disabled: !Object.keys(picks).length })
+    if (state.presets.length) items.push({ label: '管理方案…', icon: <Settings2 size={15} />, onSelect: () => setManaging(true) })
+    menu.open(anchorOf(el), items, 260)
   }
 
   if (!state.materialRoot || !state.outputRoot) return <Setup />
@@ -259,7 +308,17 @@ export function ExtractView() {
             </button>
           </div>
         ) : (
-            <div className="pick-table cols-3" role="table">
+          <>
+            <div className="toolbar">
+              <button className="btn btn-ghost" onClick={e => openPresetMenu(e.currentTarget)} aria-haspopup="menu" disabled={copying}>
+                <Layers size={16} />
+                {activePreset ? `方案：${activePreset.name}` : '方案'}
+                <ChevronDown size={14} className="dim" />
+              </button>
+              <span className="toolbar-spacer" />
+              <ModeSwitch value={repeatMode} onChange={setRepeatMode} disabled={copying} />
+            </div>
+            <div className="pick-table" role="table">
               {state.tags.length > 0 && (
                 <div className="tag-bar" role="group" aria-label="按标签筛选分类">
                   <span className="tag-bar-label" title="点标签，只显示带这个标签的分类">
@@ -299,7 +358,8 @@ export function ExtractView() {
               <div className="pick-head" role="row">
                 <span role="columnheader">分类</span>
                 <span role="columnheader" className="ta-c">数量</span>
-                <span role="columnheader" className="ta-r">本次</span>
+                <span role="columnheader" className="ta-c">乘数</span>
+                <span role="columnheader" className="ta-r pick-col-out">本次</span>
               </div>
               {visible.map(c => {
                 const r = rows.get(c.name)!
@@ -341,7 +401,10 @@ export function ExtractView() {
                         })}
                         {!c.tagIds.length && addTag(c)}
                       </span>
-                      <span className="pick-meta">{empty ? '没有视频' : `共 ${num(c.count)} 个视频 · ${bytes(c.bytes)}`}</span>
+                      <span className="pick-meta">
+                        {empty ? '没有视频' : `共 ${num(c.count)} 个视频 · ${bytes(c.bytes)}`}
+                        {r.repeat > 1 && r.files > 0 && ` · ${ruleLine(repeatMode, r.count, r.repeat)}`}
+                      </span>
                       {r.error && <span className="pick-error">{r.error}</span>}
                     </div>
                     <div role="cell" className="ta-c">
@@ -355,14 +418,30 @@ export function ExtractView() {
                         placeholder="0"
                         disabled={empty || copying}
                         aria-label={`${c.name} 的数量`}
-                        value={draft[c.name] ?? ''}
-                        onChange={e => setDraft(d => ({ ...d, [c.name]: e.target.value }))}
+                        value={draft[c.name]?.count ?? ''}
+                        onChange={e => setEntry(c.name, 'count', e.target.value)}
+                        onBlur={() => normalize(c.name)}
                         onKeyDown={e => onKeyDown(e, c.name)}
                         onFocus={e => e.target.select()}
                       />
                     </div>
-                    <div role="cell" className="pick-out ta-r">
-                      {r.count > 0 && !r.error ? num(r.count) : '—'}
+                    <div role="cell" className="ta-c">
+                      <label className="rep-input">
+                        <span aria-hidden>×</span>
+                        <input
+                          inputMode="numeric"
+                          placeholder="1"
+                          disabled={empty || copying}
+                          aria-label={`${c.name} 的乘数`}
+                          value={draft[c.name]?.repeat ?? ''}
+                          onChange={e => setEntry(c.name, 'repeat', e.target.value)}
+                          onKeyDown={e => onKeyDown(e, c.name)}
+                          onFocus={e => e.target.select()}
+                        />
+                      </label>
+                    </div>
+                    <div role="cell" className="pick-out pick-col-out ta-r">
+                      {r.files > 0 ? num(r.files) : '—'}
                     </div>
                   </div>
                 )
@@ -376,6 +455,7 @@ export function ExtractView() {
                 </div>
               )}
             </div>
+          </>
         )}
       </section>
 
@@ -397,18 +477,27 @@ export function ExtractView() {
             </span>
             <span className="slip-unit">个视频</span>
           </div>
+          {usesRule(picks, repeatMode) && (
+            <p className="slip-rule">
+              <span className="slip-mode">{modeInfo(repeatMode).label}</span>
+            </p>
+          )}
           {active.length > 0 ? (
             <ul className="slip-parts">
               {active.slice(0, 6).map(c => (
                 <li key={c.name} className={rows.get(c.name)?.error ? 'is-error' : ''}>
                   <span className="slip-part-name">{c.name}</span>
-                  <span className="slip-part-n">{num(rows.get(c.name)!.count)}</span>
+                  <span className="slip-part-n">
+                    {rows.get(c.name)!.repeat > 1 ? `${num(rows.get(c.name)!.count)} × ${rows.get(c.name)!.repeat}` : num(rows.get(c.name)!.count)}
+                  </span>
                 </li>
               ))}
               {active.length > 6 && <li className="dim">另外 {active.length - 6} 个分类</li>}
             </ul>
           ) : (
-            <p className="slip-hint">在左侧填写每个分类要抽几个视频，按回车跳到下一项，最后一项按回车直接抽取。每类随机抽取、不重复，原素材始终保留。</p>
+            <p className="slip-hint">
+              在左侧填写每个分类要抽几个视频，按回车跳到下一项，最后一项按回车直接抽取。输入 <b>5*3</b> 表示数量 5、乘数 3。原素材始终保留。
+            </p>
           )}
 
           <div className="dest">
@@ -510,7 +599,7 @@ export function ExtractView() {
                     {cat} <span className="dim">{items.length}</span>
                   </div>
                   {items.map(it => (
-                    <div key={it.name} className="file-name" title={it.name}>
+                    <div key={it.name} className="file-name" title={it.origin ? `${it.name}（${it.origin} 的副本）` : it.name}>
                       {it.name}
                     </div>
                   ))}
@@ -546,6 +635,8 @@ export function ExtractView() {
         )}
       </aside>
       {tagging.node}
+      {menu.node}
+      {managing && <PresetManager onClose={() => setManaging(false)} />}
     </div>
   )
 }
