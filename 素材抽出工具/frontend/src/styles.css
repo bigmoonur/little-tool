@@ -1298,6 +1298,7 @@ kbd {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  flex-shrink: 0;
   animation: drop-in 0.22s ease-out;
 }
 @keyframes drop-in {
