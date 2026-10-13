@@ -271,11 +271,13 @@ func TestStatusDoesNotAliasState(t *testing.T) {
 func TestDiskErrorsNeitherOpenNorJamTheLock(t *testing.T) {
 	l, dir, _ := lockedFixture(t)
 	path := l.path
-	blocked := filepath.Join(dir, "not-a-directory")
-	if err := os.WriteFile(blocked, []byte("block"), 0o600); err != nil {
+	// 让 lock.json 的位置上是一个非空文件夹：写入（改名覆盖）和删除在各个系统上都会失败。
+	// 不能用“上级路径是普通文件”来模拟，Windows 会把它当成文件不存在，删除就算成功了。
+	blocked := filepath.Join(dir, "blocked", "lock.json")
+	if err := os.MkdirAll(filepath.Join(blocked, "keep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	l.path = filepath.Join(blocked, "lock.json")
+	l.path = blocked
 	if err := l.Set("0000"); err == nil || l.Status() != (Status{Enabled: true}) {
 		t.Fatalf("failed Set changed state: %v %+v", err, l.Status())
 	}
