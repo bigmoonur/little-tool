@@ -55,7 +55,7 @@ export function LicenseGate({ status, version, onActivated }: {
     <div className="gate">
       <div className="gate-card">
         <Logo className="gate-logo" />
-        <h1>激活文本随机提取工具</h1>
+        <h1>激活链接抽取工具</h1>
         <label className="field">
           <span className="field-label">授权码</span>
           <input

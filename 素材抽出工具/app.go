@@ -17,7 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const AppVersion = "1.1.8"
+const AppVersion = "1.2.0"
 
 type App struct {
 	ctx     context.Context
@@ -303,6 +303,43 @@ func (a *App) DedupeList(id string) (Deduped, error) {
 	return Deduped{snap, n}, err
 }
 
+// ---------- 文本标签 ----------
+
+func (a *App) CreateTag(name string) (Created, error) {
+	if err := a.requireLicense(); err != nil {
+		return Created{}, err
+	}
+	snap, id, err := a.store.CreateTag(name)
+	return Created{snap, id}, err
+}
+
+func (a *App) RenameTag(id, name string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
+	return a.store.RenameTag(id, name)
+}
+
+func (a *App) DeleteTag(id string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
+	return a.store.DeleteTag(id)
+}
+
+func (a *App) ListItems(id string) (library.ListItems, error) { return a.store.ListItems(id) }
+
+func (a *App) SetItemTags(id string, indexes []int, tagIDs []string, updatedAt int64, action string) (library.Snapshot, error) {
+	if err := a.requireLicense(); err != nil {
+		return library.Snapshot{}, err
+	}
+	return a.store.SetItemTags(id, indexes, tagIDs, updatedAt, action)
+}
+
+func (a *App) AvailableLists(tagIDs []string) ([]library.ListInfo, error) {
+	return a.store.AvailableLists(tagIDs)
+}
+
 // ---------- 导入 ----------
 
 func (a *App) PreviewImport(plan library.ImportPlan) library.ImportReport {
@@ -340,6 +377,9 @@ func (a *App) Extract(reqs []library.PickRequest) (Extracted, error) {
 		return Extracted{}, err
 	}
 	copied := a.copy(res.Text) == nil
+	if copied {
+		a.store.SaveDraft(map[string]library.Pick{})
+	}
 	entry := a.store.AddHistory(res)
 	return Extracted{Result: res, Copied: copied, HistoryID: entry.ID, Time: entry.Time}, nil
 }
@@ -352,6 +392,7 @@ func (a *App) CopyText(text string) error {
 	if err := a.copy(text); err != nil {
 		return errors.New("剪贴板正被其他程序占用，请稍后再试")
 	}
+	a.store.SaveDraft(map[string]library.Pick{})
 	return nil
 }
 
@@ -463,8 +504,8 @@ func (a *App) ExportBackup() (string, error) {
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "导出备份",
-		DefaultFilename: "文本随机提取工具备份-" + time.Now().Format("20060102") + ".json",
-		Filters:         []runtime.FileFilter{{DisplayName: "文本随机提取工具备份 (*.json)", Pattern: "*.json"}},
+		DefaultFilename: "链接抽取工具备份-" + time.Now().Format("20060102") + ".json",
+		Filters:         []runtime.FileFilter{{DisplayName: "链接抽取工具备份 (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return "", err
@@ -486,7 +527,7 @@ func (a *App) RestoreBackup() (Restored, error) {
 	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "选择备份文件",
-		Filters: []runtime.FileFilter{{DisplayName: "文本随机提取工具备份 (*.json)", Pattern: "*.json"}},
+		Filters: []runtime.FileFilter{{DisplayName: "链接抽取工具备份 (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return Restored{Snapshot: a.store.Snapshot()}, err

@@ -6,7 +6,7 @@ import { ImportDialog } from './dialogs/ImportDialog'
 import { SettingsDialog } from './dialogs/SettingsDialog'
 import { hasFiles, loadFiles, type LoadedFile } from './lib/files'
 import { draftToPicks, picksToDraft } from './lib/pick'
-import type { Draft, InitInfo, LicenseStatus, Snapshot, View } from './types'
+import type { Draft, Extracted, InitInfo, LicenseStatus, PickRequest, RepeatMode, Snapshot, View } from './types'
 import { useDialogs } from './ui/Modal'
 import { useToasts } from './ui/Toasts'
 import { ExtractView } from './views/ExtractView'
@@ -61,7 +61,7 @@ export default function App() {
   if ('error' in boot) {
     return (
       <div className="fatal">
-        <h1>文本随机提取工具无法启动</h1>
+        <h1>链接抽取工具无法启动</h1>
         <p>{boot.error}</p>
         <p className="dim">请确认当前 Windows 账户可以写入“应用数据”文件夹，然后重新打开程序。</p>
       </div>
@@ -97,6 +97,10 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   const [snap, setSnap] = useState<Snapshot>(init.snapshot)
   const [view, setView] = useState<View>(init.snapshot.lists.length ? 'extract' : 'library')
   const [draft, setDraft] = useState<Draft>(() => picksToDraft(init.snapshot.draft ?? {}))
+  const remembered = Object.values(init.snapshot.draft ?? {})[0]
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(remembered?.mode ?? 'consecutive')
+  const [tagFilter, setTagFilter] = useState<string[]>(remembered?.tagIds ?? [])
+  const [lastExtraction, setLastExtraction] = useState<{ response: Extracted; requests: PickRequest[] } | null>(null)
   const [selectedId, setSelectedId] = useState('')
   const [importInit, setImportInit] = useState<ImportOpen | null>(null)
   const [dropped, setDropped] = useState<LoadedFile[] | null>(null)
@@ -142,6 +146,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
     },
     draft,
     setDraft,
+    repeatMode, setRepeatMode, tagFilter, setTagFilter, lastExtraction, setLastExtraction,
     selectedId,
     select: async id => {
       if (id === selectedId) return true
@@ -188,9 +193,9 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
   // 记住数量（设置中开启时）
   useEffect(() => {
     if (!snap.settings.rememberDraft) return
-    const t = window.setTimeout(() => api.saveDraft(draftToPicks(draft, snap.lists)), 600)
+    const t = window.setTimeout(() => api.saveDraft(draftToPicks(draft, snap.lists, repeatMode, tagFilter)), 600)
     return () => window.clearTimeout(t)
-  }, [draft, snap.settings.rememberDraft])
+  }, [draft, snap.lists, repeatMode, tagFilter, snap.settings.rememberDraft])
 
   const noticeShown = useRef(false)
   useEffect(() => {
@@ -271,7 +276,7 @@ function Shell({ init, license, setLicense }: { init: InitInfo; license: License
         <header className="topbar">
           <div className="brand">
             <Logo />
-            <span>文本随机提取工具</span>
+            <span>链接抽取工具</span>
           </div>
           <nav className="nav" role="tablist" aria-label="页面">
             {NAV.map((n, i) => (

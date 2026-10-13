@@ -5,7 +5,8 @@ import { useApp } from '../ctx'
 import { num } from '../lib/format'
 import type { ListInfo } from '../types'
 
-const LINE_HEIGHT = 22
+// 与 styles.css 中 .gutter / .editor-text 的行高一致。
+const LINE_HEIGHT = 24
 
 function lineOf(text: string, index: number) {
   let n = 0

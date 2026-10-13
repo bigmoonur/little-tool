@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -39,6 +40,7 @@ type ListInfo struct {
 // Snapshot 是发给界面的素材库概要，不含条目正文。
 type Snapshot struct {
 	Groups   []Group         `json:"groups"`
+	Tags     []Tag           `json:"tags"`
 	Lists    []ListInfo      `json:"lists"`
 	Presets  []Preset        `json:"presets"`
 	Draft    map[string]Pick `json:"draft"`
@@ -58,6 +60,7 @@ type HistoryEntry struct {
 type undoEntry struct {
 	label   string
 	groups  []Group
+	tags    []Tag
 	lists   []List
 	presets []Preset
 }
@@ -242,6 +245,7 @@ func (s *Store) remember(label string) {
 	s.undo = &undoEntry{
 		label:   label,
 		groups:  slices.Clone(s.data.Groups),
+		tags:    slices.Clone(s.data.Tags),
 		lists:   slices.Clone(s.data.Lists),
 		presets: clonePresets(s.data.Presets),
 	}
@@ -250,7 +254,16 @@ func (s *Store) remember(label string) {
 func clonePresets(ps []Preset) []Preset {
 	out := slices.Clone(ps)
 	for i := range out {
-		out[i].Picks = maps.Clone(out[i].Picks)
+		out[i].Picks = clonePicks(out[i].Picks)
+	}
+	return out
+}
+
+func clonePicks(ps map[string]Pick) map[string]Pick {
+	out := maps.Clone(ps)
+	for id, p := range out {
+		p.TagIDs = slices.Clone(p.TagIDs)
+		out[id] = p
 	}
 	return out
 }
@@ -268,8 +281,10 @@ func (s *Store) mutate(undoLabel string, fn func(d *Data) error) (Snapshot, erro
 	}
 	backup := *s.data
 	backup.Groups = slices.Clone(s.data.Groups)
+	backup.Tags = slices.Clone(s.data.Tags)
 	backup.Lists = slices.Clone(s.data.Lists)
 	backup.Presets = clonePresets(s.data.Presets)
+	backup.Draft = clonePicks(s.data.Draft)
 	if err := fn(s.data); err != nil {
 		*s.data = backup
 		s.undo = prev
@@ -292,7 +307,7 @@ func (s *Store) Undo() (Snapshot, error) {
 	}
 	u := s.undo
 	cur := *s.data
-	s.data.Groups, s.data.Lists, s.data.Presets = u.groups, u.lists, u.presets
+	s.data.Groups, s.data.Tags, s.data.Lists, s.data.Presets = u.groups, u.tags, u.lists, u.presets
 	s.undo = nil
 	if err := s.save(); err != nil {
 		*s.data = cur
@@ -314,9 +329,10 @@ func (s *Store) snapshot() Snapshot {
 	d := s.data
 	snap := Snapshot{
 		Groups:   slices.Clone(d.Groups),
+		Tags:     slices.Clone(d.Tags),
 		Lists:    make([]ListInfo, len(d.Lists)),
 		Presets:  clonePresets(d.Presets),
-		Draft:    maps.Clone(d.Draft),
+		Draft:    clonePicks(d.Draft),
 		Settings: d.Settings,
 	}
 	for i, l := range d.Lists {
@@ -588,7 +604,7 @@ func (s *Store) SetListText(id, text string) (Snapshot, error) {
 		}
 		lines, _ := SplitLines(text)
 		d.Lists[i].setItems(lines)
-		d.Lists[i].UpdatedAt = s.now().UnixMilli()
+		d.Lists[i].UpdatedAt = max(d.Lists[i].UpdatedAt+1, s.now().UnixMilli())
 		return nil
 	})
 }
@@ -607,7 +623,7 @@ func (s *Store) DedupeList(id string) (Snapshot, int, error) {
 		}
 		removed = len(l.Items) - l.unique
 		l.setItems(dedupe(l.Items))
-		l.UpdatedAt = s.now().UnixMilli()
+		l.UpdatedAt = max(l.UpdatedAt+1, s.now().UnixMilli())
 		return nil
 	})
 	return snap, removed, err
@@ -644,6 +660,11 @@ func (s *Store) ApplyImport(plan ImportPlan) (Snapshot, ImportReport, error) {
 func (s *Store) Extract(reqs []PickRequest) (ExtractResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, req := range reqs {
+		if err := s.data.checkTags(req.TagIDs); err != nil {
+			return ExtractResult{}, err
+		}
+	}
 	return Extract(s.data.Lists, reqs, s.rng)
 }
 
@@ -727,7 +748,13 @@ func (s *Store) SavePreset(name string, picks map[string]Pick) (Snapshot, string
 		clean := map[string]Pick{}
 		for listID, p := range picks {
 			if p.Count > 0 && d.listIndex(listID) >= 0 {
-				clean[listID] = Pick{Count: p.Count, Repeat: max(1, p.Repeat)}
+				if err := d.checkTags(p.TagIDs); err != nil {
+					return err
+				}
+				if !validRepeatMode(p.Mode) {
+					return userErr("不支持的乘数规则")
+				}
+				clean[listID] = Pick{Count: p.Count, Repeat: max(1, p.Repeat), Mode: p.Mode, TagIDs: slices.Clone(p.TagIDs)}
 			}
 		}
 		if len(clean) == 0 {
@@ -815,10 +842,11 @@ func (s *Store) SaveDraft(draft map[string]Pick) {
 	clean := map[string]Pick{}
 	for id, p := range draft {
 		if (p.Count > 0 || p.Repeat > 1) && s.data.listIndex(id) >= 0 {
+			p.TagIDs = slices.Clone(p.TagIDs)
 			clean[id] = p
 		}
 	}
-	if maps.Equal(clean, s.data.Draft) {
+	if reflect.DeepEqual(clean, s.data.Draft) {
 		return
 	}
 	s.data.Draft = clean
@@ -854,12 +882,12 @@ func (s *Store) RestoreData(b []byte) (Snapshot, error) {
 	}
 	d := NewData()
 	if json.Unmarshal(b, &probe) != nil || len(probe.Lists) == 0 || json.Unmarshal(b, d) != nil {
-		return s.Snapshot(), userErr("这不是有效的文本随机提取工具备份文件")
+		return s.Snapshot(), userErr("这不是有效的链接抽取工具备份文件")
 	}
 	d.normalize()
 	return s.mutate("从备份恢复", func(cur *Data) error {
 		s.backupIfDue(true)
-		cur.Groups, cur.Lists, cur.Presets = d.Groups, d.Lists, d.Presets
+		cur.Groups, cur.Tags, cur.Lists, cur.Presets = d.Groups, d.Tags, d.Lists, d.Presets
 		cur.Draft = map[string]Pick{}
 		return nil
 	})

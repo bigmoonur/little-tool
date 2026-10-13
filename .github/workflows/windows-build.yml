@@ -31,7 +31,7 @@ jobs:
       matrix:
         include:
           - directory: 素材抽出工具
-            program: 文本随机提取工具
+            program: 链接抽取工具
             key: text
             data_env: MATERIAL_PICKER_DATA
             artifact: windows-release
@@ -59,9 +59,8 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.27.2'
-          cache-dependency-path: |
-            ${{ matrix.directory }}/go.sum
-            shared/license/go.sum
+          # Previous Windows runs stalled while saving the Go cache after packaging.
+          cache: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'

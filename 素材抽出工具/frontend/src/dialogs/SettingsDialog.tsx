@@ -164,7 +164,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
-        <p className="settings-version dim">文本随机提取工具 {info.version}</p>
+        <p className="settings-version dim">链接抽取工具 {info.version}</p>
       </div>
     </Modal>
   )

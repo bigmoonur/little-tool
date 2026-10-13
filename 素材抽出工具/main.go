@@ -81,7 +81,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "文本随机提取工具",
+		Title:            "链接抽取工具",
 		Width:            width,
 		Height:           height,
 		MinWidth:         860,
@@ -105,7 +105,7 @@ func main() {
 			IsZoomControlEnabled: false,
 		},
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "文本随机提取工具", Message: "版本 " + AppVersion},
+			About: &mac.AboutInfo{Title: "链接抽取工具", Message: "版本 " + AppVersion},
 		},
 	})
 	if err != nil {

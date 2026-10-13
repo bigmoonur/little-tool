@@ -1,18 +1,14 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
-  ArrowDown, ArrowUp, Check, ChevronDown, Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, Pencil, Plus, Search, Trash2, X,
+  ArrowDown, ArrowUp, Check, ChevronDown, Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, Pencil, Plus, Search, Tags, Trash2, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../ctx'
 import { num } from '../lib/format'
 import { GROUP_COLORS, type Group, type ListInfo } from '../types'
 import { anchorOf, useMenu, type MenuAnchor, type MenuItem } from '../ui/Menu'
-import { buildSections } from './ExtractView'
-
-type Drop =
-  | { kind: 'list'; id: string; where: 'before' | 'after' }
-  | { kind: 'group-into'; id: string }
-  | { kind: 'group'; id: string; where: 'before' | 'after' }
+import { buildSections, useReorder } from '../lib/reorder'
+import { TagManager } from '../dialogs/TagManager'
 
 const COLOR_NAMES: Record<string, string> = {
   indigo: '靛蓝', teal: '青绿', amber: '琥珀', rose: '玫红', violet: '紫', green: '绿', orange: '橙', slate: '灰',
@@ -21,8 +17,8 @@ const COLOR_NAMES: Record<string, string> = {
 export function LibrarySidebar() {
   const { snap, setSnap, selectedId, select, run, prompt, confirm, commit, toast, openImport } = useApp()
   const [query, setQuery] = useState('')
-  const [drop, setDrop] = useState<Drop | null>(null)
-  const dragging = useRef<{ kind: 'list' | 'group'; id: string } | null>(null)
+  const reorder = useReorder()
+  const [tagsOpen, setTagsOpen] = useState(false)
   const menu = useMenu()
   const { deleteList } = useDeleteList()
 
@@ -176,71 +172,9 @@ export function LibrarySidebar() {
     menu.open(anchor, items, 220)
   }
 
-  // ---------- 拖动排序 ----------
-
-  const half = (e: React.DragEvent) => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    return e.clientY < r.top + r.height / 2 ? 'before' : 'after'
-  }
-
-  const onDragOverList = (e: React.DragEvent, l: ListInfo) => {
-    if (dragging.current?.kind !== 'list') return
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setDrop({ kind: 'list', id: l.id, where: half(e) })
-  }
-
-  const onDragOverGroup = (e: React.DragEvent, groupId: string) => {
-    const d = dragging.current
-    if (!d) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (d.kind === 'list') setDrop({ kind: 'group-into', id: groupId })
-    else if (groupId && d.id !== groupId) setDrop({ kind: 'group', id: groupId, where: half(e) })
-  }
-
-  const onDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const d = dragging.current
-    const target = drop
-    dragging.current = null
-    setDrop(null)
-    if (!d || !target) return
-    if (d.kind === 'list') {
-      const l = snap.lists.find(x => x.id === d.id)
-      if (!l) return
-      if (target.kind === 'group-into') return moveList(l, target.id)
-      if (target.kind !== 'list' || target.id === d.id) return
-      const t = snap.lists.find(x => x.id === target.id)
-      if (!t) return
-      if (target.where === 'before') return moveList(l, t.groupId, t.id)
-      const same = snap.lists.filter(x => x.groupId === t.groupId && x.id !== d.id)
-      const next = same[same.findIndex(x => x.id === t.id) + 1]
-      return moveList(l, t.groupId, next?.id ?? '')
-    }
-    if (target.kind === 'group') {
-      const rest = snap.groups.filter(g => g.id !== d.id)
-      const idx = rest.findIndex(g => g.id === target.id) + (target.where === 'after' ? 1 : 0)
-      const s = await run(api.moveGroup(d.id, idx))
-      if (s) setSnap(s)
-    }
-  }
-
-  const endDrag = () => {
-    dragging.current = null
-    setDrop(null)
-  }
-
   const toggle = (g: Group) => {
     setSnap({ ...snap, groups: snap.groups.map(x => (x.id === g.id ? { ...x, collapsed: !g.collapsed } : x)) })
     api.setGroupCollapsed(g.id, !g.collapsed).then(setSnap)
-  }
-
-  const dropClass = (kind: Drop['kind'], id: string) => {
-    if (!drop || drop.id !== id || drop.kind !== kind) return ''
-    return 'where' in drop ? `drop-${drop.where}` : 'drop-into'
   }
 
   return (
@@ -255,7 +189,7 @@ export function LibrarySidebar() {
         )}
       </div>
 
-      <div className="tree" onDragLeave={e => !e.currentTarget.contains(e.relatedTarget as Node) && setDrop(null)}>
+      <div className="tree" onDragLeave={reorder.leave}>
         {sections.map(sec => {
           const g = sec.group
           const gid = g?.id ?? ''
@@ -265,17 +199,13 @@ export function LibrarySidebar() {
             <div key={gid || 'loose'} className={`tree-section ${g ? `c-${g.color}` : 'c-none'}`}>
               {showHeader && (
                 <div
-                  className={`tree-group ${dropClass('group-into', gid)} ${g ? dropClass('group', gid) : ''}`}
-                  draggable={!!g}
-                  onDragStart={e => {
-                    if (!g) return
-                    dragging.current = { kind: 'group', id: g.id }
-                    e.dataTransfer.effectAllowed = 'move'
-                    e.dataTransfer.setData('text/x-group', g.id)
-                  }}
-                  onDragEnd={endDrag}
-                  onDragOver={e => onDragOverGroup(e, gid)}
-                  onDrop={onDrop}
+                  className={`tree-group ${reorder.dropClass('group-into', gid)} ${g ? reorder.dropClass('group', gid) : ''}`}
+                  draggable={!!g && !reorder.pending}
+                  onDragStart={e => g && reorder.start(e, 'group', g.id)}
+                  onDragEnd={reorder.end}
+                  onDragEnter={e => reorder.overGroup(e, gid)}
+                  onDragOver={e => reorder.overGroup(e, gid)}
+                  onDrop={reorder.onDrop}
                   onContextMenu={e => {
                     if (!g) return
                     e.preventDefault()
@@ -305,16 +235,13 @@ export function LibrarySidebar() {
                   {sec.lists.map(l => (
                     <li
                       key={l.id}
-                      className={`tree-item ${l.id === selectedId ? 'is-selected' : ''} ${dropClass('list', l.id)}`}
-                      draggable={!q}
-                      onDragStart={e => {
-                        dragging.current = { kind: 'list', id: l.id }
-                        e.dataTransfer.effectAllowed = 'move'
-                        e.dataTransfer.setData('text/x-list', l.id)
-                      }}
-                      onDragEnd={endDrag}
-                      onDragOver={e => onDragOverList(e, l)}
-                      onDrop={onDrop}
+                      className={`tree-item ${l.id === selectedId ? 'is-selected' : ''} ${reorder.dropClass('list', l.id)}`}
+                      draggable={!q && !reorder.pending}
+                      onDragStart={e => reorder.start(e, 'list', l.id)}
+                      onDragEnd={reorder.end}
+                      onDragEnter={e => reorder.overList(e, l)}
+                      onDragOver={e => reorder.overList(e, l)}
+                      onDrop={reorder.onDrop}
                       onContextMenu={e => {
                         e.preventDefault()
                         listMenu(l, { x: e.clientX, y: e.clientY })
@@ -330,11 +257,21 @@ export function LibrarySidebar() {
                     </li>
                   ))}
                   {g && sec.lists.length === 0 && (
-                    <li className={`tree-empty ${dropClass('group-into', gid)}`} onDragOver={e => onDragOverGroup(e, gid)} onDrop={onDrop}>
-                      <button className="link" onClick={() => newList(gid)}>
-                        空分组，新建分类
-                      </button>
-                      <span className="dim">或把分类拖到这里</span>
+                    <li
+                      className={`tree-empty ${reorder.dropClass('group-into', gid)}`}
+                      onDragEnter={e => reorder.overGroup(e, gid)}
+                      onDragOver={e => reorder.overGroup(e, gid)}
+                      onDrop={reorder.onDrop}
+                    >
+                      <span className="dim">空分组，可以把分类拖到这里</span>
+                      <span className="tree-empty-actions">
+                        <button className="link" onClick={() => openImport({ groupId: gid })}>
+                          添加素材
+                        </button>
+                        <button className="link" onClick={() => newList(gid)}>
+                          新建分类
+                        </button>
+                      </span>
                     </li>
                   )}
                 </ul>
@@ -355,6 +292,14 @@ export function LibrarySidebar() {
           新建分组
         </button>
       </div>
+      <div className="lib-tag-foot">
+        <button className="btn btn-tags" onClick={() => setTagsOpen(true)}>
+          <Tags size={18} />
+          管理标签
+          {snap.tags.length > 0 && <span className="tree-count">{snap.tags.length}</span>}
+        </button>
+      </div>
+      {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} />}
       {menu.node}
     </nav>
   )

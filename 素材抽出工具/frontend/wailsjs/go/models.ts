@@ -5,6 +5,8 @@ export namespace library {
 	    name: string;
 	    count: number;
 	    repeat: number;
+	    mode?: string;
+	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PickPart(source);
@@ -16,6 +18,8 @@ export namespace library {
 	        this.name = source["name"];
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
+	        this.mode = source["mode"];
+	        this.tagIds = source["tagIds"];
 	    }
 	}
 	export class ExtractResult {
@@ -257,9 +261,59 @@ export namespace library {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class TextItem {
+	    index: number;
+	    text: string;
+	    tagIds: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new TextItem(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.text = source["text"];
+	        this.tagIds = source["tagIds"];
+	    }
+	}
+	export class ListItems {
+	    items: TextItem[];
+	    updatedAt: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ListItems(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], TextItem);
+	        this.updatedAt = source["updatedAt"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Pick {
 	    count: number;
 	    repeat: number;
+	    mode?: string;
+	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Pick(source);
@@ -269,6 +323,8 @@ export namespace library {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
+	        this.mode = source["mode"];
+	        this.tagIds = source["tagIds"];
 	    }
 	}
 	
@@ -276,6 +332,8 @@ export namespace library {
 	    listId: string;
 	    count: number;
 	    repeat: number;
+	    mode?: string;
+	    tagIds?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PickRequest(source);
@@ -286,6 +344,8 @@ export namespace library {
 	        this.listId = source["listId"];
 	        this.count = source["count"];
 	        this.repeat = source["repeat"];
+	        this.mode = source["mode"];
+	        this.tagIds = source["tagIds"];
 	    }
 	}
 	export class Preset {
@@ -342,8 +402,23 @@ export namespace library {
 	        this.importDedupe = source["importDedupe"];
 	    }
 	}
+	export class Tag {
+	    id: string;
+	    name: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Tag(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	    }
+	}
 	export class Snapshot {
 	    groups: Group[];
+	    tags: Tag[];
 	    lists: ListInfo[];
 	    presets: Preset[];
 	    draft: Record<string, Pick>;
@@ -357,6 +432,7 @@ export namespace library {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groups = this.convertValues(source["groups"], Group);
+	        this.tags = this.convertValues(source["tags"], Tag);
 	        this.lists = this.convertValues(source["lists"], ListInfo);
 	        this.presets = this.convertValues(source["presets"], Preset);
 	        this.draft = this.convertValues(source["draft"], Pick, true);
@@ -382,6 +458,7 @@ export namespace library {
 		    return a;
 		}
 	}
+
 
 }
 

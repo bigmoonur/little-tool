@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardPaste, FileText, FolderOpen, Upload, X } from 'lucide-react'
+import { ClipboardPaste, FileText, FolderOpen, FolderPlus, Upload, X } from 'lucide-react'
 import { api } from '../api'
 import { useApp, type ImportOpen } from '../ctx'
 import { countLines, hasFiles, loadFiles, pickFiles, type LoadedFile } from '../lib/files'
@@ -38,11 +38,27 @@ function ListSelect({ snap, value, onChange, id }: { snap: Snapshot; value: stri
 }
 
 function GroupSelect({ snap, value, onChange }: { snap: Snapshot; value: string; onChange: (v: string) => void }) {
-  if (!snap.groups.length) return null
+  const { prompt, run, setSnap } = useApp()
+  // 新建后直接选中，这次添加的素材就放进新分组，不用先导入再移动。
+  const create = async () => {
+    const name = await prompt({
+      title: '新建分组',
+      label: '分组名称',
+      placeholder: '例如：常用链接',
+      confirmText: '新建',
+      hint: '新建后会自动选中，这次添加的素材直接放进这个分组。',
+    })
+    if (!name) return
+    const res = await run(api.createGroup(name))
+    if (res) {
+      setSnap(res.snapshot)
+      onChange(res.id)
+    }
+  }
   return (
-    <label className="inline-field">
+    <div className="inline-field">
       <span>放入分组</span>
-      <select className="select" value={value} onChange={e => onChange(e.target.value)}>
+      <select className="select" aria-label="放入分组" value={value} onChange={e => onChange(e.target.value)}>
         <option value="">未分组</option>
         {snap.groups.map(g => (
           <option key={g.id} value={g.id}>
@@ -50,7 +66,11 @@ function GroupSelect({ snap, value, onChange }: { snap: Snapshot; value: string;
           </option>
         ))}
       </select>
-    </label>
+      <button className="btn" onClick={create}>
+        <FolderPlus size={18} />
+        新建分组
+      </button>
+    </div>
   )
 }
 
@@ -385,7 +405,7 @@ export function ImportDialog({ init, dropped, onConsumeDropped, onClose }: {
               <span className="radio-label">每个文件一个分类</span>
               <span className="dim radio-note">以文件名命名，同名的分类默认追加</span>
             </label>
-            {filesMode === 'each' && snap.groups.length > 0 && (
+            {filesMode === 'each' && (
               <div className="radio-sub">
                 <GroupSelect snap={snap} value={groupId} onChange={setGroupId} />
               </div>
@@ -402,7 +422,7 @@ export function ImportDialog({ init, dropped, onConsumeDropped, onClose }: {
                 <input className="input" value={newName} maxLength={40} onChange={e => setNewName(e.target.value)} placeholder="分类名称" aria-label="新分类名称" />
               )}
             </label>
-            {filesMode === 'merge' && snap.groups.length > 0 && (
+            {filesMode === 'merge' && (
               <div className="radio-sub">
                 <GroupSelect snap={snap} value={groupId} onChange={setGroupId} />
               </div>
