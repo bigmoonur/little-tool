@@ -151,7 +151,7 @@ export function HistoryView() {
                   {cat} <span className="dim">{list.length}</span>
                 </div>
                 {list.map(it => (
-                  <div key={it.name} className="file-name" title={it.origin ? `${it.name}（${it.origin} 的副本）` : it.name}>
+                  <div key={it.name} className="file-name" title={it.origin ? `${it.name}（原名 ${it.origin}）` : it.name}>
                     <span>{it.name}</span>
                     <span className="dim tnum">{bytes(it.size)}</span>
                   </div>

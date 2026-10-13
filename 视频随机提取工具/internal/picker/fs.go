@@ -154,6 +154,65 @@ func ScanCategories(root string) ([]Category, error) {
 	return cats, err
 }
 
+// VideoFile 是素材库里看到的一个视频。
+type VideoFile struct {
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	Modified int64  `json:"modified"` // 毫秒
+}
+
+// CategoryDir 返回分类的文件夹。分类必须是素材根目录下现有的子文件夹，别的路径一律不认。
+func CategoryDir(root, category string) (string, error) {
+	if err := checkRoot(root, "素材根目录"); err != nil {
+		return "", err
+	}
+	dirs, err := plainSubdirs(root)
+	if err != nil {
+		return "", userErr("无法读取素材根目录：%v", err)
+	}
+	for _, name := range dirs {
+		if name == category {
+			return filepath.Join(root, name), nil
+		}
+	}
+	return "", userErr("分类「%s」已经不存在了，请检查素材根目录", category)
+}
+
+// ListVideos 列出一个分类里的视频，按名称排序。
+func ListVideos(root, category string) ([]VideoFile, error) {
+	dir, err := CategoryDir(root, category)
+	if err != nil {
+		return nil, err
+	}
+	vs, err := listVideos(dir)
+	if err != nil {
+		return nil, userErr("无法读取分类「%s」：%v", category, err)
+	}
+	out := make([]VideoFile, len(vs))
+	for i, v := range vs {
+		out[i] = VideoFile{Name: v.name, Size: v.size, Modified: v.mod.UnixMilli()}
+	}
+	return out, nil
+}
+
+// VideoPath 返回分类里一个视频的路径，只认这个分类里现有的视频。
+func VideoPath(root, category, name string) (string, error) {
+	dir, err := CategoryDir(root, category)
+	if err != nil {
+		return "", err
+	}
+	vs, err := listVideos(dir)
+	if err != nil {
+		return "", userErr("无法读取分类「%s」：%v", category, err)
+	}
+	for _, v := range vs {
+		if v.name == name {
+			return v.path, nil
+		}
+	}
+	return "", userErr("视频「%s」已经不在这个分类里了", name)
+}
+
 // ListDestinations 读取目标根目录下的子文件夹及其中已有的视频数。
 func ListDestinations(root string) ([]Destination, error) {
 	if err := checkRoot(root, "目标根目录"); err != nil {

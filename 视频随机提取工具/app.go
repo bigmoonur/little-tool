@@ -116,7 +116,7 @@ type InitInfo struct {
 
 func (a *App) Init() (InitInfo, error) {
 	if a.initErr != nil {
-		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeRepeat}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
+		return InitInfo{Settings: picker.Settings{Draft: map[string]int{}, DraftRepeat: map[string]int{}, Mode: picker.ModeConsecutive}, Lock: a.LockStatus()}, errors.New("无法打开数据文件夹：" + a.initErr.Error())
 	}
 	return InitInfo{Settings: a.store.Settings(), Version: AppVersion, Platform: goruntime.GOOS, Lock: a.LockStatus()}, nil
 }
@@ -284,7 +284,7 @@ func (a *App) ChooseMaterialRoot() (State, error) {
 		if st.MaterialRoot != path {
 			st.Draft = map[string]int{}
 			st.DraftRepeat = map[string]int{}
-			st.Mode = picker.ModeRepeat
+			st.Mode = picker.ModeConsecutive
 		}
 		st.MaterialRoot = path
 	})
@@ -527,3 +527,28 @@ func (a *App) OpenFolder(path string) error {
 }
 
 func (a *App) OpenDataFolder() error { return openPath(a.store.Dir()) }
+
+// ---------- 素材库 ----------
+
+// Videos 列出一个分类里的视频，供素材库查看。
+func (a *App) Videos(category string) ([]picker.VideoFile, error) {
+	return picker.ListVideos(a.store.Settings().MaterialRoot, category)
+}
+
+// OpenCategory 在资源管理器中打开分类的文件夹。
+func (a *App) OpenCategory(category string) error {
+	dir, err := picker.CategoryDir(a.store.Settings().MaterialRoot, category)
+	if err != nil {
+		return err
+	}
+	return openPath(dir)
+}
+
+// OpenVideo 用系统默认的播放器打开素材库里的一个视频。
+func (a *App) OpenVideo(category, name string) error {
+	path, err := picker.VideoPath(a.store.Settings().MaterialRoot, category, name)
+	if err != nil {
+		return err
+	}
+	return openPath(path)
+}

@@ -17,6 +17,11 @@ import (
 func checkCopyNames(t *testing.T, p Plan) map[string]int {
 	t.Helper()
 	seenNames, seenSources := map[string]bool{}, map[string]int{}
+	// 循环重复和分轮随机分了不止一轮时，每个文件名都带轮次序号。
+	ordered := false
+	for _, pick := range p.Picks {
+		ordered = ordered || (p.Mode != ModeConsecutive && pick.Repeat > 1)
+	}
 	var size int64
 	for _, it := range p.Items {
 		original := filepath.Base(it.Source())
@@ -24,7 +29,11 @@ func checkCopyNames(t *testing.T, p Plan) map[string]int {
 			t.Fatalf("duplicate destination name %q", it.Name)
 		}
 		seenNames[fold(it.Name)] = true
-		if seenSources[it.Source()] == 0 {
+		if ordered {
+			if origin, ok := roundOrigin(it.Name); !ok || origin != original || it.Origin != original {
+				t.Fatalf("round copy has wrong name or origin: %+v", it)
+			}
+		} else if seenSources[it.Source()] == 0 {
 			if it.Name != original || it.Origin != "" {
 				t.Fatalf("first copy lost original name: %+v", it)
 			}
@@ -47,7 +56,7 @@ func TestRepeatMultiplier(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Items) != 9 || p.Mode != ModeRepeat || !reflect.DeepEqual(p.Picks, map[string]Pick{"开场": {Count: 2, Repeat: 4}, "产品": {Count: 1, Repeat: 1}}) {
+	if len(p.Items) != 9 || p.Mode != ModeConsecutive || !reflect.DeepEqual(p.Picks, map[string]Pick{"开场": {Count: 2, Repeat: 4}, "产品": {Count: 1, Repeat: 1}}) {
 		t.Fatalf("plan parameters = %+v", p)
 	}
 	counts := checkCopyNames(t, p)
@@ -117,19 +126,168 @@ func TestRandomRounds(t *testing.T) {
 	if len(productRounds) < 2 || index != len(p.Items) {
 		t.Fatalf("rounds did not redraw videos: %v", productRounds)
 	}
+	// 文件夹按名称排序时，一轮排完才轮到下一轮。
+	rounds := sortedRounds(p)
+	if len(rounds) != 4 || len(rounds[0]) != 5 || len(rounds[1]) != 5 || len(rounds[2]) != 3 || len(rounds[3]) != 2 {
+		t.Fatalf("rounds by name = %v", rounds)
+	}
+}
+
+// sortedRounds 把一批文件按名称排序（文件夹里看到的顺序），再按轮次序号分组，返回每一轮的素材原名。
+func sortedRounds(p Plan) [][]string {
+	items := append([]Item{}, p.Items...)
+	sortNames(items, func(it Item) string { return it.Name })
+	var out [][]string
+	prefix := ""
+	for _, it := range items {
+		if len(it.Name) < 3 || it.Name[:3] != prefix {
+			prefix = it.Name[:3]
+			out = append(out, nil)
+		}
+		out[len(out)-1] = append(out[len(out)-1], filepath.Base(it.Source()))
+	}
+	return out
+}
+
+func TestCycleRepeatsTheSameBatchInOrder(t *testing.T) {
+	f := newFixture(t)
+	picks := map[string]Pick{"产品": {Count: 2, Repeat: 3}, "开场": {Count: 2, Repeat: 1}, "结尾": {Count: 1, Repeat: 2}}
+	p, err := Prepare(f.material, f.output, "第一批", picks, ModeCycle, false, rng())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != ModeCycle || len(p.Items) != 10 || !reflect.DeepEqual(p.Picks, picks) {
+		t.Fatalf("cycle plan = %+v", p)
+	}
+	counts := checkCopyNames(t, p)
+	if len(counts) != 5 {
+		t.Fatalf("picked sources = %v", counts)
+	}
+	for path, count := range counts {
+		if want := picks[filepath.Base(filepath.Dir(path))].Repeat; count != want {
+			t.Fatalf("%s copied %d times, want %d", path, count, want)
+		}
+	}
+	rounds := sortedRounds(p)
+	if len(rounds) != 3 || len(rounds[0]) != 5 || len(rounds[1]) != 3 || len(rounds[2]) != 2 {
+		t.Fatalf("rounds by name = %v", rounds)
+	}
+	// 后面每一轮都是第一轮里乘数还没用完的那些视频，顺序也一样。
+	in := func(round []string, name string) bool {
+		for _, n := range round {
+			if n == name {
+				return true
+			}
+		}
+		return false
+	}
+	var second, third []string
+	for _, name := range rounds[0] {
+		if strings.HasPrefix(name, "p") || name == "e1.mp4" {
+			second = append(second, name)
+		}
+		if strings.HasPrefix(name, "p") {
+			third = append(third, name)
+		}
+	}
+	if !reflect.DeepEqual(rounds[1], second) || !reflect.DeepEqual(rounds[2], third) || !in(rounds[0], "e1.mp4") {
+		t.Fatalf("later rounds differ from the first: %v", rounds)
+	}
+	res, err := Execute(context.Background(), p, nil)
+	if err != nil || len(names(p.Destination)) != 10 || res.Mode != ModeCycle {
+		t.Fatalf("execute cycle: %+v %v", res, err)
+	}
+	if got := names(p.Destination); got[0][:3] != "01_" || got[5][:3] != "02_" || got[8][:3] != "03_" {
+		t.Fatalf("destination names = %v", got)
+	}
+}
+
+func TestRoundNumbersOnlyWhenThereAreRounds(t *testing.T) {
+	for _, mode := range []string{ModeCycle, ModeRandom} {
+		f := newFixture(t)
+		p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 3, Repeat: 1}, "结尾": {Count: 1}}, mode, false, rng())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range p.Items {
+			if it.Name != filepath.Base(it.Source()) || it.Origin != "" {
+				t.Fatalf("%s without a multiplier renamed %+v", mode, it)
+			}
+		}
+	}
+}
+
+func TestRoundCopiesStillBlockTheirSource(t *testing.T) {
+	f := newFixture(t)
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, ModeCycle, false, rng())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Execute(context.Background(), p, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(p.Destination); !reflect.DeepEqual(got, []string{"01_e1.mp4", "02_e1.mp4"}) {
+		t.Fatalf("destination = %v", got)
+	}
+	// 文件夹里没有叫 e1.mp4 的文件，但它已经按轮放进去过，不能再抽一次。
+	for _, mode := range []string{ModeConsecutive, ModeCycle, ModeRandom} {
+		_, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, mode, false, rng())
+		if err == nil || !strings.Contains(err.Error(), "同名") {
+			t.Fatalf("%s picked a video that is already there: %v", mode, err)
+		}
+	}
+	again, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, ModeCycle, true, rng())
+	if err != nil || again.Items[0].Name != "01_e1.mp4" || again.Items[1].Name != "02_e1.mp4" {
+		t.Fatalf("cleaning should free the names: %+v %v", again.Items, err)
+	}
+}
+
+func TestRoundNumberNeverTakesAnExistingName(t *testing.T) {
+	f := newFixture(t)
+	// 素材本来就叫 01_e1.mp4：加上序号后是 01_01_e1.mp4，原名仍然记得住。
+	write(t, filepath.Join(f.material, "编号", "01_e1.mp4"), "numbered source")
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"编号": {Count: 1, Repeat: 2}}, ModeCycle, false, rng())
+	if err != nil || p.Items[0].Name != "01_01_e1.mp4" || p.Items[0].Origin != "01_e1.mp4" || p.Items[1].Name != "02_01_e1.mp4" {
+		t.Fatalf("numbered source = %+v %v", p.Items, err)
+	}
+	// 目标文件夹里的 03_01_e1.mp4 占着“01_e1.mp4”这个原名，同名素材会被避开；e1.mp4 不受影响。
+	write(t, filepath.Join(f.output, "第一批", "03_01_e1.mp4"), "kept")
+	if _, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"编号": {Count: 1, Repeat: 2}}, ModeCycle, false, rng()); err == nil {
+		t.Fatal("source already in the folder was picked again")
+	}
+	p, err = Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, ModeCycle, false, rng())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 01_e1.mp4 这个名称被上面的原名占着，第一轮改用带后缀的名称，绝不覆盖。
+	if p.Items[0].Name == "01_e1.mp4" || !strings.HasPrefix(p.Items[0].Name, "01_e1_") || p.Items[0].Origin != "e1.mp4" || p.Items[1].Name != "02_e1.mp4" {
+		t.Fatalf("round names = %+v", p.Items)
+	}
+	checkCopyNames(t, Plan{Items: p.Items[1:], Bytes: p.Items[1].Size, Mode: p.Mode, Picks: p.Picks})
+}
+
+func TestOldModeNameMeansConsecutive(t *testing.T) {
+	f := newFixture(t)
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, "repeat", false, rng())
+	if err != nil || p.Mode != ModeConsecutive || p.Items[0].Name != "e1.mp4" || p.Items[1].Origin != "e1.mp4" {
+		t.Fatalf("old mode = %+v %v", p, err)
+	}
+	if storedMode("repeat") != ModeConsecutive || storedMode("other") != ModeConsecutive || storedMode(ModeCycle) != ModeCycle {
+		t.Fatal("stored modes are not normalised")
+	}
 }
 
 func TestSuffixGrowthAndKeptNames(t *testing.T) {
 	f := newFixture(t)
 	picks := map[string]Pick{"结尾": {Count: 1, Repeat: 40}}
-	first, err := Prepare(f.material, f.output, "第一批", picks, ModeRepeat, false, rng())
+	first, err := Prepare(f.material, f.output, "第一批", picks, ModeConsecutive, false, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 占用同一种子原本会给第一个副本使用的名称，并以不同大小写保存。
 	kept := strings.ToUpper(first.Items[1].Name)
 	write(t, filepath.Join(f.output, "第一批", kept), "keep")
-	p, err := Prepare(f.material, f.output, "第一批", picks, ModeRepeat, false, rng())
+	p, err := Prepare(f.material, f.output, "第一批", picks, ModeConsecutive, false, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +331,7 @@ func TestSuffixCannotTakeSelectedOriginal(t *testing.T) {
 	for _, ch := range suffixChars {
 		write(t, filepath.Join(f.material, "结尾", "e1_"+string(ch)+".mp4"), "another source")
 	}
-	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 37, Repeat: 2}}, ModeRepeat, false, rng())
+	p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 37, Repeat: 2}}, ModeConsecutive, false, rng())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +347,7 @@ func TestSuffixCannotTakeSelectedOriginal(t *testing.T) {
 }
 
 func TestMultiplierAvoidance(t *testing.T) {
-	for _, mode := range []string{ModeRepeat, ModeRandom} {
+	for _, mode := range []string{ModeConsecutive, ModeCycle, ModeRandom} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFixture(t)
 			write(t, filepath.Join(f.material, "结尾", "P1.MP4"), "different source")
@@ -228,7 +386,7 @@ func TestCleanKeepsVideoNamedDirectories(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	_, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, ModeRepeat, true, rng())
+	_, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"结尾": {Count: 1, Repeat: 2}}, ModeConsecutive, true, rng())
 	if err == nil || !strings.Contains(err.Error(), "同名") {
 		t.Fatalf("cleaning should not make a kept directory's name available: %v", err)
 	}
@@ -268,14 +426,14 @@ func TestPickValidation(t *testing.T) {
 	}
 	checkCopyNames(t, p)
 	picks["产品"] = Pick{Count: 2, Repeat: 51}
-	_, err = Prepare(f.material, f.output, "第一批", picks, ModeRepeat, false, rng())
+	_, err = Prepare(f.material, f.output, "第一批", picks, ModeConsecutive, false, rng())
 	if err == nil || err.Error() != "一次最多复制 10000 个文件，请减小数量或乘数" {
 		t.Fatalf("combined item limit = %v", err)
 	}
 }
 
 func TestExecuteCopies(t *testing.T) {
-	for _, mode := range []string{ModeRepeat, ModeRandom} {
+	for _, mode := range []string{ModeConsecutive, ModeCycle, ModeRandom} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFixture(t)
 			picks := map[string]Pick{"产品": {Count: 2, Repeat: 3}, "结尾": {Count: 1, Repeat: 4}}
@@ -341,7 +499,7 @@ func TestCopiesRestoreDestinationOnCancelAndFailure(t *testing.T) {
 			dest := filepath.Join(f.output, "第一批")
 			write(t, filepath.Join(dest, "old.mp4"), "old video")
 			write(t, filepath.Join(dest, "notes.txt"), "notes")
-			p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 1, Repeat: 3}, "结尾": {Count: 1, Repeat: 2}}, ModeRepeat, true, rng())
+			p, err := Prepare(f.material, f.output, "第一批", map[string]Pick{"产品": {Count: 1, Repeat: 3}, "结尾": {Count: 1, Repeat: 2}}, ModeConsecutive, true, rng())
 			if err != nil {
 				t.Fatal(err)
 			}

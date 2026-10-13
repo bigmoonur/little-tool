@@ -13,34 +13,50 @@ export interface RowState {
 }
 
 /**
- * 两种乘数规则。视频是复制进文件夹的，没有先后顺序，所以只分“重复同一批”和“每轮重新抽”。
- * 示范都按“数量 2、乘数 3”：字母代表抽到的不同视频，每一组是一个视频的几份副本（或一轮抽到的视频）。
+ * 三种乘数规则。视频是复制进文件夹的，文件夹里的先后顺序就是文件名的顺序，所以靠文件名来排：
+ * 连续重复的副本在原名后面加随机字符，循环重复和分轮随机在前面加轮次序号。
+ * 示范都按“数量 2、乘数 3”：字母代表抽到的不同视频，每一组是连在一起的一段；names 是文件夹里开头几个文件的名字。
  */
-export const REPEAT_MODES: { mode: RepeatMode; label: string; short: string; glyph: string; demo: string[][]; help: string }[] = [
+export const REPEAT_MODES: {
+  mode: RepeatMode; label: string; short: string; glyph: string; demo: string[][]; names: string[]; help: string
+}[] = [
   {
-    mode: 'repeat',
-    label: '重复同一批',
-    short: '重复',
+    mode: 'consecutive',
+    label: '连续重复',
+    short: '连续',
     glyph: 'AABB',
     demo: [['A', 'A', 'A'], ['B', 'B', 'B']],
-    help: '抽 2 个不同的视频，每个复制 3 份。',
+    names: ['A.mp4', 'A_k.mp4', 'A_7.mp4', 'B.mp4'],
+    help: '抽 2 个不同的视频，每个连着放 3 份。副本在文件名后面加随机字符，紧跟在原视频后面。',
+  },
+  {
+    mode: 'cycle',
+    label: '循环重复',
+    short: '循环',
+    glyph: 'ABAB',
+    demo: [['A', 'B'], ['A', 'B'], ['A', 'B']],
+    names: ['01_A.mp4', '01_B.mp4', '02_A.mp4', '02_B.mp4'],
+    help: '抽 2 个不同的视频排成一批，整批放 3 遍。文件名前面加轮次序号，一遍排完再排下一遍。',
   },
   {
     mode: 'random',
     label: '分轮随机',
-    short: '分轮',
+    short: '随机',
     glyph: 'ABCA',
     demo: [['A', 'B'], ['C', 'A'], ['B', 'D']],
-    help: '一共抽 3 轮，每轮重新抽 2 个。同一轮里不重复，不同轮可能抽到同一个视频，也可能抽到新的。',
+    names: ['01_A.mp4', '01_B.mp4', '02_A.mp4', '02_C.mp4'],
+    help: '一共抽 3 轮，每轮重新抽 2 个。同一轮里不重复，不同轮可能抽到同一个视频。文件名前面同样加轮次序号。',
   },
 ]
 
+/** 旧方案、旧记录里没有规则或是改名前的写法，按连续重复处理。 */
 export const modeInfo = (mode?: string) => REPEAT_MODES.find(m => m.mode === mode) ?? REPEAT_MODES[0]
 
 /** 用这一行自己的数量和乘数说明会怎样复制，只在乘数大于 1 时需要。 */
 export function ruleLine(mode: RepeatMode, count: number, repeat: number) {
+  if (mode === 'cycle') return `抽 ${num(count)} 个排成一批，整批放 ${num(repeat)} 遍`
   if (mode === 'random') return `抽 ${num(repeat)} 轮，每轮重新抽 ${num(count)} 个`
-  return `抽 ${num(count)} 个，每个复制 ${num(repeat)} 份`
+  return `抽 ${num(count)} 个，每个连着放 ${num(repeat)} 份`
 }
 
 const COMBINED = /^(\d+)\s*[*xX×]\s*(\d+)$/

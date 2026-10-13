@@ -64,7 +64,7 @@ func TestOldHistoryDerivesPicksWithoutAliasing(t *testing.T) {
 	}
 	want := map[string]Pick{"开场": {Count: 2, Repeat: 1}, "离线": {Count: 1, Repeat: 1}}
 	h := s.History()
-	if len(h) != 2 || !reflect.DeepEqual(h[0].Picks, want) || h[0].Mode != ModeRepeat || h[1].Picks == nil || len(h[1].Picks) != 0 || h[1].Mode != ModeRepeat {
+	if len(h) != 2 || !reflect.DeepEqual(h[0].Picks, want) || h[0].Mode != ModeConsecutive || h[1].Picks == nil || len(h[1].Picks) != 0 || h[1].Mode != ModeConsecutive {
 		t.Fatalf("legacy history = %+v", h)
 	}
 	h[0].Items[0].Category = "mutated"
@@ -81,10 +81,10 @@ func TestDraftNormalizationAndSnapshots(t *testing.T) {
 		remember   bool
 		wantMode   string
 	}{
-		{"old", "", true, ModeRepeat},
+		{"old", "", true, ModeConsecutive},
 		{"random", ModeRandom, true, ModeRandom},
-		{"unknown", "other", true, ModeRepeat},
-		{"disabled", ModeRandom, false, ModeRepeat},
+		{"unknown", "other", true, ModeConsecutive},
+		{"disabled", ModeRandom, false, ModeConsecutive},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -116,7 +116,7 @@ func TestDraftNormalizationAndSnapshots(t *testing.T) {
 				t.Fatalf("draft parameters not persisted: %v", err)
 			}
 			got = s.Update(func(st *Settings) { st.RememberDraft = false })
-			if got.Draft == nil || got.DraftRepeat == nil || len(got.Draft) != 0 || len(got.DraftRepeat) != 0 || got.Mode != ModeRepeat {
+			if got.Draft == nil || got.DraftRepeat == nil || len(got.Draft) != 0 || len(got.DraftRepeat) != 0 || got.Mode != ModeConsecutive {
 				t.Fatalf("disabled draft retained values: %+v", got)
 			}
 		})
@@ -152,7 +152,7 @@ func TestPresetNamesAndPickCleaning(t *testing.T) {
 	if err != nil || id == "" {
 		t.Fatalf("save cleaned preset: %s %v", id, err)
 	}
-	want := Preset{ID: id, Name: "晨间 方案", Mode: ModeRepeat, Picks: map[string]Pick{"离线": {Count: 2, Repeat: 1}, "另一分类": {Count: 1, Repeat: 99}}}
+	want := Preset{ID: id, Name: "晨间 方案", Mode: ModeConsecutive, Picks: map[string]Pick{"离线": {Count: 2, Repeat: 1}, "另一分类": {Count: 1, Repeat: 99}}}
 	if got := s.Presets(); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Fatalf("cleaned preset = %+v", got)
 	}

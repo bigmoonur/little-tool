@@ -14,8 +14,8 @@ export interface Settings {
   mode: RepeatMode
 }
 
-/** 乘数规则：重复同一批，或者分轮重新抽。 */
-export type RepeatMode = 'repeat' | 'random'
+/** 乘数规则：连续重复、循环重复，或者分轮重新抽。 */
+export type RepeatMode = 'consecutive' | 'cycle' | 'random'
 
 /** 一个分类要抽几个、复制几份（或抽几轮）。 */
 export interface Pick {
@@ -73,6 +73,14 @@ export interface Category {
   tagIds: string[]
 }
 
+/** 素材库里看到的一个视频。 */
+export interface VideoFile {
+  name: string
+  size: number
+  /** 修改时间（毫秒）。 */
+  modified: number
+}
+
 export interface Destination {
   name: string
   videos: number
@@ -97,7 +105,7 @@ export interface Item {
   /** 放进目标文件夹时用的文件名。 */
   name: string
   size: number
-  /** 同一个视频的另一份副本改了名字时，这里是原来的文件名。 */
+  /** 副本加了后缀，或者按轮加了序号时，这里是原来的文件名。 */
   origin?: string
 }
 
@@ -149,7 +157,7 @@ export interface Done {
   entry: HistoryEntry
 }
 
-export type View = 'extract' | 'history'
+export type View = 'extract' | 'library' | 'history'
 
 export interface LicenseStatus {
   state: 'checking' | 'active' | 'inactive'

@@ -24,7 +24,7 @@ func TestStatePresetLists(t *testing.T) {
 		})
 	}
 	info, err := NewApp(nil, nil, errors.New("unavailable")).Init()
-	if err == nil || info.Settings.Draft == nil || info.Settings.DraftRepeat == nil || info.Settings.Mode != picker.ModeRepeat {
+	if err == nil || info.Settings.Draft == nil || info.Settings.DraftRepeat == nil || info.Settings.Mode != picker.ModeConsecutive {
 		t.Fatalf("failed Init settings = %+v %v", info.Settings, err)
 	}
 }
@@ -75,7 +75,7 @@ func TestSaveDraftCountsRepeatsAndMode(t *testing.T) {
 	assertEmpty := func(t *testing.T) {
 		t.Helper()
 		st := a.store.Settings()
-		if st.Draft == nil || st.DraftRepeat == nil || len(st.Draft) != 0 || len(st.DraftRepeat) != 0 || st.Mode != picker.ModeRepeat {
+		if st.Draft == nil || st.DraftRepeat == nil || len(st.Draft) != 0 || len(st.DraftRepeat) != 0 || st.Mode != picker.ModeConsecutive {
 			t.Fatalf("disabled drafts = %+v", st)
 		}
 	}
@@ -91,7 +91,7 @@ func TestSaveDraftCountsRepeatsAndMode(t *testing.T) {
 	for _, mode := range []string{"", "unknown"} {
 		a.SaveDraft(counts, repeats, mode)
 		st := a.store.Settings()
-		if st.Mode != picker.ModeRepeat || st.Draft["开场"] != 2 || st.DraftRepeat["开场"] != 5 {
+		if st.Mode != picker.ModeConsecutive || st.Draft["开场"] != 2 || st.DraftRepeat["开场"] != 5 {
 			t.Fatalf("draft mode %q = %+v", mode, st)
 		}
 	}

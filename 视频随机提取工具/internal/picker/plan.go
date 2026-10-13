@@ -1,9 +1,11 @@
 package picker
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -14,9 +16,13 @@ type Pick struct {
 	Repeat int `json:"repeat"`
 }
 
+// 三种乘数规则。文件夹里的先后顺序就是文件名的顺序，所以靠文件名来排：
+// 连续重复的副本在原名后面加随机字符，紧挨着原视频；
+// 循环重复和分轮随机在文件名前面加两位轮次序号，一轮排完再排下一轮。
 const (
-	ModeRepeat = "repeat"
-	ModeRandom = "random"
+	ModeConsecutive = "consecutive"
+	ModeCycle       = "cycle"
+	ModeRandom      = "random"
 )
 
 const MaxRepeat = 99
@@ -48,13 +54,35 @@ type Plan struct {
 }
 
 func pickMode(mode string) (string, error) {
-	if mode == "" {
-		mode = ModeRepeat
+	switch mode {
+	case "", "repeat": // “重复同一批”是连续重复改名前的写法
+		return ModeConsecutive, nil
+	case ModeConsecutive, ModeCycle, ModeRandom:
+		return mode, nil
 	}
-	if mode != ModeRepeat && mode != ModeRandom {
-		return "", userErr("不支持的乘数规则")
+	return "", userErr("不支持的乘数规则")
+}
+
+// storedMode 读取保存过的乘数规则，认不出的按连续重复处理。
+func storedMode(mode string) string {
+	if m, err := pickMode(mode); err == nil {
+		return m
 	}
-	return mode, nil
+	return ModeConsecutive
+}
+
+// 按轮放入的视频，文件名是“两位轮次序号_原名”。
+var roundName = regexp.MustCompile(`^\d{2}_(.+)$`)
+
+func roundPrefix(round int) string { return fmt.Sprintf("%02d_", round+1) }
+
+// roundOrigin 去掉轮次序号，得到素材原名。
+func roundOrigin(name string) (string, bool) {
+	m := roundName.FindStringSubmatch(name)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
 
 func clonePicks(picks map[string]Pick) map[string]Pick {
@@ -65,7 +93,7 @@ func clonePicks(picks map[string]Pick) map[string]Pick {
 	return out
 }
 
-// Prepare 按数量和乘数抽取；名称归属源文件，额外副本使用不冲突的后缀。
+// Prepare 按数量和乘数抽取；名称归属源文件，额外副本使用不冲突的后缀或轮次序号。
 func Prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mode string, clean bool, r *rand.Rand) (Plan, error) {
 	mode, err := pickMode(mode)
 	if err != nil {
@@ -142,18 +170,36 @@ func Prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mod
 	}
 	taken := map[string]string{}
 	for _, e := range entries {
-		if !removable[e.Name()] {
-			taken[fold(e.Name())] = ""
+		if removable[e.Name()] {
+			continue
+		}
+		taken[fold(e.Name())] = ""
+		// 以前按轮放入的视频带着轮次序号，去掉序号才是素材原名：原名也算已占用，同一个视频不会再抽一次。
+		if origin, ok := roundOrigin(e.Name()); ok {
+			taken[fold(origin)] = ""
 		}
 	}
+	if mode == ModeConsecutive {
+		rounds = 1
+	}
+	// 分了不止一轮时，每个文件名前都加轮次序号。
+	ordered := rounds > 1
 
 	avoided := map[string]bool{}
 	picked := map[string]bool{}
 	suffixes := map[string]*suffixPool{}
-	appendVideo := func(category string, v video) {
+	appendVideo := func(category string, v video, round int) {
 		it := Item{Category: category, Name: v.name, Size: v.size, source: v.path, mod: v.mod}
-		if picked[v.path] {
+		switch {
+		case ordered:
+			it.Name = roundPrefix(round) + v.name
+			if _, ok := taken[fold(it.Name)]; ok {
+				it.Name = copyName(it.Name, taken, suffixes, r)
+			}
+		case picked[v.path]:
 			it.Name = copyName(v.name, taken, suffixes, r)
+		}
+		if it.Name != v.name {
 			it.Origin = v.name
 		}
 		picked[v.path] = true
@@ -201,26 +247,28 @@ func Prepare(materialRoot, outputRoot, folder string, picks map[string]Pick, mod
 		}
 		return selected, nil
 	}
-	if mode == ModeRepeat {
-		rounds = 1
-	}
+	batch := map[string][]video{}
 	for round := 0; round < rounds; round++ {
 		for _, name := range names {
 			pick, ok := used[name]
 			if !ok || pick.Repeat <= round {
 				continue
 			}
-			selected, err := selectVideos(name)
-			if err != nil {
-				return Plan{}, err
+			// 循环重复每一轮都是第一轮抽到的那一批；分轮随机每轮重新抽。
+			selected, again := batch[name]
+			if !again || mode == ModeRandom {
+				if selected, err = selectVideos(name); err != nil {
+					return Plan{}, err
+				}
+				batch[name] = selected
 			}
 			for _, v := range selected {
 				copies := 1
-				if mode == ModeRepeat {
+				if mode == ModeConsecutive {
 					copies = pick.Repeat
 				}
 				for copy := 0; copy < copies; copy++ {
-					appendVideo(name, v)
+					appendVideo(name, v, round)
 				}
 			}
 		}

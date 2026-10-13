@@ -323,7 +323,8 @@ kbd {
   cursor: pointer;
   flex: none;
 }
-.icon-btn:hover {
+.icon-btn:hover,
+.icon-btn.is-open {
   background: var(--surface-3);
   color: var(--ink);
 }
@@ -1230,6 +1231,260 @@ kbd {
   background: var(--surface);
   border-radius: var(--r-l);
   padding: 10px 0;
+}
+
+/* ---------- 素材库 ---------- */
+
+.library {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  min-height: 0;
+}
+.lib-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+.lib-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  margin: 12px 12px 6px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface-2);
+  flex: none;
+}
+.lib-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}
+.lib-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+.lib-search.is-inline {
+  width: 220px;
+  margin: 0;
+  background: var(--surface);
+}
+.lib-list {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 12px;
+  overflow-y: auto;
+}
+.lib-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.lib-item:hover {
+  background: var(--surface-2);
+}
+.lib-item.is-selected {
+  background: var(--select);
+  color: var(--select-ink);
+  font-weight: 600;
+}
+.lib-item.is-empty:not(.is-selected) .lib-item-name {
+  color: var(--ink-3);
+}
+.lib-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-item-tags {
+  display: inline-flex;
+  gap: 3px;
+  flex: none;
+}
+.lib-item-count {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 400;
+  flex: none;
+}
+.lib-item.is-selected .lib-item-count {
+  color: inherit;
+  opacity: 0.75;
+}
+.lib-none {
+  padding: 12px 18px;
+  color: var(--ink-3);
+}
+.lib-side-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+.lib-side-foot .btn {
+  justify-content: flex-start;
+}
+.lib-side-foot .lib-item-count {
+  margin-left: auto;
+}
+.lib-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 10px 6px;
+  font-size: 12.5px;
+}
+.lib-root-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.lib-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.lib-detail > * {
+  flex: 1;
+  min-width: 0;
+}
+.lib-detail > .empty-inline {
+  align-self: flex-start;
+  margin: 18px 24px;
+}
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 24px 12px;
+}
+.detail .detail-title h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail .detail-meta b {
+  color: var(--ink);
+}
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  font-size: 13px;
+}
+.detail .detail-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 视频清单：只读，点表头排序，双击或点播放用默认播放器打开。 */
+.video-table {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  overflow: hidden;
+}
+.video-head,
+.video-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 132px 26px;
+  gap: 12px;
+  align-items: center;
+  padding: 0 10px 0 18px;
+}
+.video-head {
+  flex: none;
+  height: 36px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.video-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  justify-self: start;
+}
+.video-sort.ta-r {
+  justify-self: end;
+}
+.video-sort:hover,
+.video-sort.is-on {
+  color: var(--ink);
+}
+.video-rows {
+  flex: 1;
+  overflow-y: auto;
+}
+.video-row {
+  min-height: 36px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 37px;
+}
+.video-row:last-child {
+  border-bottom: 0;
+}
+.video-row:hover {
+  background: var(--surface-2);
+}
+.video-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.video-row .icon-btn {
+  color: var(--ink-3);
+}
+.video-row:hover .icon-btn {
+  color: var(--ink);
+}
+.video-none {
+  padding: 18px;
+  color: var(--ink-3);
+}
+.video-table[aria-busy="true"] .video-rows {
+  opacity: 0.5;
+}
+.lib-note {
+  color: var(--ink-3);
+  font-size: 12.5px;
 }
 
 /* ---------- 弹窗、菜单、提示 ---------- */
@@ -2236,7 +2491,7 @@ kbd {
 
 /* ---------- 乘数规则与方案 ---------- */
 
-/* 乘数规则：两段切换。样式与顶栏的页面切换一致。 */
+/* 乘数规则：三段切换。样式与顶栏的页面切换一致。 */
 .mode-switch {
   display: flex;
   align-items: center;
@@ -2375,6 +2630,16 @@ kbd {
   font-size: 13px;
   line-height: 1.5;
 }
+/* 这种规则下文件夹里开头几个文件的名字。 */
+.mode-demo-names {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
 
 /* 本次抽取用到的乘数规则；没用乘数时不显示。 */
 .slip-rule {
@@ -2438,6 +2703,16 @@ kbd {
   }
   .seg-short {
     display: inline;
+  }
+  .library {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+  .lib-search.is-inline {
+    width: 168px;
+  }
+  .video-head,
+  .video-row {
+    grid-template-columns: minmax(0, 1fr) 76px 116px 26px;
   }
 }
 

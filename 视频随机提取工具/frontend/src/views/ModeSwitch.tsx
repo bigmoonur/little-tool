@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { REPEAT_MODES } from '../lib/pick'
 import type { RepeatMode } from '../types'
 import { anchorOf, Popover, type Anchor } from '../ui/Popover'
 
-/** 乘数规则：两段切换，每段带一个小图样；问号里用同一组示范对比两种规则。 */
+/** 乘数规则：三段切换，每段带一个小图样；问号里用同一组示范对比三种规则在文件夹里的排列。 */
 export function ModeSwitch({ value, onChange, disabled = false }: { value: RepeatMode; onChange: (m: RepeatMode) => void; disabled?: boolean }) {
   const [help, setHelp] = useState<Anchor | null>(null)
+  const helpBtn = useRef<HTMLButtonElement>(null)
   return (
     <div className="mode-switch">
       <span className="mode-switch-label" id="mode-label">
@@ -35,18 +36,22 @@ export function ModeSwitch({ value, onChange, disabled = false }: { value: Repea
         ))}
       </div>
       <button
-        className="icon-btn sm"
-        aria-label="两种乘数规则有什么不同"
+        ref={helpBtn}
+        className={`icon-btn sm ${help ? 'is-open' : ''}`}
+        aria-label="三种乘数规则有什么不同"
         aria-haspopup="dialog"
-        title="两种乘数规则有什么不同"
-        onClick={e => setHelp(anchorOf(e.currentTarget, 'end'))}
+        aria-expanded={!!help}
+        title={help ? '收起说明' : '三种乘数规则有什么不同'}
+        onClick={e => setHelp(help ? null : anchorOf(e.currentTarget, 'end'))}
       >
         <CircleQuestionMark size={16} />
       </button>
       {help && (
-        <Popover anchor={help} onClose={() => setHelp(null)} width={420} label="乘数规则说明" className="mode-help">
-          <div className="pop-title">两种乘数规则</div>
-          <p className="mode-help-lead">同样填“数量 2、乘数 3”，都会放进去 6 个文件。字母代表抽到的不同视频：</p>
+        <Popover anchor={help} onClose={() => setHelp(null)} width={452} label="乘数规则说明" className="mode-help" trigger={helpBtn}>
+          <div className="pop-title">三种乘数规则</div>
+          <p className="mode-help-lead">
+            同样填“数量 2、乘数 3”，都会放进去 6 个文件，区别在文件夹里排列的顺序。字母代表抽到的不同视频：
+          </p>
           <div className="mode-demos" role="radiogroup" aria-label="乘数规则">
             {REPEAT_MODES.map(m => (
               <button
@@ -70,10 +75,18 @@ export function ModeSwitch({ value, onChange, disabled = false }: { value: Repea
                   ))}
                 </span>
                 <span className="mode-demo-help">{m.help}</span>
+                <span className="mode-demo-names" aria-label={`文件名示例：${m.names.join('、')}`}>
+                  {m.names.map(n => (
+                    <span key={n}>{n}</span>
+                  ))}
+                  <span aria-hidden>…</span>
+                </span>
               </button>
             ))}
           </div>
-          <p className="mode-help-foot">同一个视频的第一份用原来的文件名，其余的副本会在文件名后面加上随机字符，例如“开场1_k.mp4”。乘数不填或填 1 时，每个视频只复制一份。</p>
+          <p className="mode-help-foot">
+            文件夹按名称排序就是上面的顺序，所以靠文件名来排。乘数不填或填 1 时，每个视频只复制一份，文件名不变。
+          </p>
         </Popover>
       )}
     </div>

@@ -66,12 +66,20 @@ export function LockStatus() {
   return window['go']['main']['App']['LockStatus']();
 }
 
+export function OpenCategory(arg1) {
+  return window['go']['main']['App']['OpenCategory'](arg1);
+}
+
 export function OpenDataFolder() {
   return window['go']['main']['App']['OpenDataFolder']();
 }
 
 export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
+export function OpenVideo(arg1, arg2) {
+  return window['go']['main']['App']['OpenVideo'](arg1, arg2);
 }
 
 export function Prepare(arg1, arg2, arg3) {
@@ -132,4 +140,8 @@ export function Unlock(arg1) {
 
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
+}
+
+export function Videos(arg1) {
+  return window['go']['main']['App']['Videos'](arg1);
 }

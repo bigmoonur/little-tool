@@ -77,8 +77,9 @@ export function ExtractView() {
     if (!folder || folder.videos === 0) setClean(false)
   }, [folder?.name, folder?.videos])
 
+  // 复制完成后焦点移到“打开文件夹”，但不滚动右侧：“本次抽取”留在原来的位置。
   useEffect(() => {
-    if (copy.phase === 'done' && copy.done?.ok) doneBtn.current?.focus()
+    if (copy.phase === 'done' && copy.done?.ok) doneBtn.current?.focus({ preventScroll: true })
   }, [copy.phase])
 
   const start = () => {
@@ -599,7 +600,7 @@ export function ExtractView() {
                     {cat} <span className="dim">{items.length}</span>
                   </div>
                   {items.map(it => (
-                    <div key={it.name} className="file-name" title={it.origin ? `${it.name}（${it.origin} 的副本）` : it.name}>
+                    <div key={it.name} className="file-name" title={it.origin ? `${it.name}（原名 ${it.origin}）` : it.name}>
                       {it.name}
                     </div>
                   ))}

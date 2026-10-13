@@ -20,6 +20,9 @@ export interface Ctx {
   version: string
   view: View
   go: (v: View) => void
+  /** 素材库里正在看的分类。 */
+  selected: string
+  select: (category: string) => void
   toast: (text: string, opts?: ToastOptions) => number
   confirm: (o: ConfirmOptions) => Promise<string | null>
   prompt: (o: PromptOptions) => Promise<string | null>

@@ -119,7 +119,7 @@ func cloneDraft(draft map[string]int) map[string]int {
 func normalizeDraft(st *Settings) {
 	mode, err := pickMode(st.Mode)
 	if err != nil || !st.RememberDraft {
-		mode = ModeRepeat
+		mode = ModeConsecutive
 	}
 	st.Mode = mode
 	if !st.RememberDraft {
@@ -165,9 +165,7 @@ func cloneHistory(e HistoryEntry) HistoryEntry {
 	} else {
 		e.Picks = clonePicks(e.Picks)
 	}
-	if e.Mode == "" {
-		e.Mode = ModeRepeat
-	}
+	e.Mode = storedMode(e.Mode)
 	return e
 }
 

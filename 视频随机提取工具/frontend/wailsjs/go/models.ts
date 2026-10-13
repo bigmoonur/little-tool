@@ -498,5 +498,21 @@ export namespace picker {
 	        this.color = source["color"];
 	    }
 	}
+	export class VideoFile {
+	    name: string;
+	    size: number;
+	    modified: number;
+
+	    static createFrom(source: any = {}) {
+	        return new VideoFile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.modified = source["modified"];
+	    }
+	}
 
 }

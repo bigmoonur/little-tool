@@ -37,9 +37,13 @@ export function LicenseStatus():Promise<license.Status>;
 
 export function LockStatus():Promise<applock.Status>;
 
+export function OpenCategory(arg1:string):Promise<void>;
+
 export function OpenDataFolder():Promise<void>;
 
 export function OpenFolder(arg1:string):Promise<void>;
+
+export function OpenVideo(arg1:string,arg2:string):Promise<void>;
 
 export function Prepare(arg1:Record<string, picker.Pick>,arg2:string,arg3:boolean):Promise<main.PlanSummary>;
 
@@ -70,3 +74,5 @@ export function State():Promise<main.State>;
 export function Unlock(arg1:string):Promise<main.LockResult>;
 
 export function UpdateSettings(arg1:main.UISettings):Promise<picker.Settings>;
+
+export function Videos(arg1:string):Promise<Array<picker.VideoFile>>;

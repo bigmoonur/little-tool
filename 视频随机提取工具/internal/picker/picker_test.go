@@ -279,3 +279,38 @@ func TestEmptyHistoryIsEmptyList(t *testing.T) {
 		t.Fatal("fresh store returned nil history")
 	}
 }
+
+func TestLibraryListsOnlyRealCategoriesAndVideos(t *testing.T) {
+	f := newFixture(t)
+	vs, err := ListVideos(f.material, "开场")
+	if err != nil || len(vs) != 3 || vs[0].Name != "o1.mp4" || vs[1].Name != "o2.MOV" || vs[0].Size != int64(len("open-o1.mp4")) || vs[0].Modified == 0 {
+		t.Fatalf("videos = %+v %v", vs, err)
+	}
+	if err := os.MkdirAll(filepath.Join(f.material, "空的"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if vs, err := ListVideos(f.material, "空的"); err != nil || vs == nil || len(vs) != 0 {
+		t.Fatalf("empty category = %#v %v", vs, err)
+	}
+	// 只认素材根目录下现有的分类和分类里现有的视频，路径拼出来的一律不认。
+	for _, category := range []string{"", ".", "..", "不存在", "开场/子目录", filepath.Join("开场", "子目录"), filepath.Join("..", "输出"), f.output} {
+		if _, err := ListVideos(f.material, category); err == nil {
+			t.Fatalf("category %q was accepted", category)
+		}
+		if _, err := CategoryDir(f.material, category); err == nil {
+			t.Fatalf("category dir %q was accepted", category)
+		}
+	}
+	path, err := VideoPath(f.material, "开场", "o2.MOV")
+	if err != nil || path != filepath.Join(f.material, "开场", "o2.MOV") {
+		t.Fatalf("video path = %q %v", path, err)
+	}
+	for _, name := range []string{"", "说明.txt", "子目录", filepath.Join("子目录", "deep.mp4"), filepath.Join("..", "产品", "p1.mp4"), "o9.mp4"} {
+		if _, err := VideoPath(f.material, "开场", name); err == nil {
+			t.Fatalf("video %q was accepted", name)
+		}
+	}
+	if _, err := ListVideos("", "开场"); err == nil {
+		t.Fatal("missing root was accepted")
+	}
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { History, Pin, PinOff, Settings as SettingsIcon, Shuffle, Lock } from 'lucide-react'
+import { History, Library, Pin, PinOff, Settings as SettingsIcon, Shuffle, Lock } from 'lucide-react'
 import { api, errorText, events } from './api'
 import { AppContext, type CopyState, type Ctx } from './ctx'
 import { SettingsDialog } from './dialogs/SettingsDialog'
@@ -13,6 +13,7 @@ import { useDialogs } from './ui/Modal'
 import { useToasts } from './ui/Toasts'
 import { ExtractView } from './views/ExtractView'
 import { HistoryView } from './views/HistoryView'
+import { LibraryView } from './views/LibraryView'
 import { LicenseGate } from './views/LicenseGate'
 
 const NO_LICENSE: LicenseStatus = {
@@ -58,6 +59,7 @@ export default function App() {
 
 const NAV: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'extract', label: '抽取', icon: <Shuffle size={16} /> },
+  { view: 'library', label: '素材库', icon: <Library size={16} /> },
   { view: 'history', label: '记录', icon: <History size={16} /> },
 ]
 
@@ -67,6 +69,7 @@ function Shell({ init, initialState, license, setLicense }: {
   const [state, setState] = useState(initialState)
   const [settings, setSettings] = useState<Settings>(init.settings)
   const [view, setView] = useState<View>('extract')
+  const [selected, select] = useState('')
   const [copy, setCopy] = useState<CopyState>({ phase: 'idle' })
   const [draft, setDraft] = useState<Draft>(() => {
     const picks: Record<string, Pick> = {}
@@ -210,11 +213,11 @@ function Shell({ init, initialState, license, setLicense }: {
     offlineNotice.current = until
   }, [license.offline, license.graceUntil, toast])
 
-  // 快捷键 Ctrl+1 / Ctrl+2 切换页面
+  // 快捷键 Ctrl+1 / Ctrl+2 / Ctrl+3 切换页面
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (document.querySelector('.modal-layer, .license-overlay, .lock-overlay')) return
-      if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2')) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2' || e.key === '3')) {
         e.preventDefault()
         setView(NAV[Number(e.key) - 1].view)
       }
@@ -239,6 +242,8 @@ function Shell({ init, initialState, license, setLicense }: {
     version: init.version,
     view,
     go: setView,
+    selected,
+    select,
     toast,
     confirm: dialogs.confirm,
     prompt: dialogs.prompt,
@@ -311,6 +316,7 @@ function Shell({ init, initialState, license, setLicense }: {
           {/* 按页面分别兜底：一个页面出错时仍可切换到其他页面。 */}
           <ErrorBoundary key={view}>
             {view === 'extract' && <ExtractView />}
+            {view === 'library' && <LibraryView />}
             {view === 'history' && <HistoryView />}
           </ErrorBoundary>
         </main>

@@ -20,6 +20,7 @@ func clonePresets(presets []Preset) []Preset {
 	out := make([]Preset, len(presets))
 	for i, preset := range presets {
 		out[i] = preset
+		out[i].Mode = storedMode(preset.Mode)
 		out[i].Picks = clonePicks(preset.Picks)
 	}
 	return out
